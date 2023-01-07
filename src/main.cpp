@@ -8,7 +8,7 @@ int main() {
 
     std::filesystem::path root_dir{"C:/projects/fotorite/photos"};
 
-    for (const auto it : std::filesystem::directory_iterator{root_dir}) {
+    for (const auto &it : std::filesystem::directory_iterator{root_dir}) {
         if (it.is_regular_file()) {
             spdlog::info("reading {}", it.path());
 
