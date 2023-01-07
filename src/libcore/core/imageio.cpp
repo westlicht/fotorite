@@ -7,8 +7,9 @@
 #include <TinyEXIF.h>
 // clang-format on
 
-#include <cctype>
 #include <string>
+#include <cctype>
+#include <cstring>
 
 FR_NAMESPACE_BEGIN
 
