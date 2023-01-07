@@ -30,17 +30,17 @@ jobs:
             name: Windows
             triplet: x64-windows
             preset: msvc
-            config: Release
+            config: release
           - os: ubuntu-latest
             name: Linux
             triplet: x64-linux
             preset: clang
-            config: Release
+            config: release
           - os: macos-latest
             name: macOS
             triplet: x64-osx
             preset: clang
-            config: Release
+            config: release
     env:
       # Indicates the location of the vcpkg as a Git submodule of the project repository.
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
@@ -94,6 +94,6 @@ jobs:
           cmake --build --preset ${{ matrix.preset }}-${{ matrix.config }}
 
       # Test the whole project with CTest, again Release configuration only.
-      # - name: Test (Release configuration)
-      #   run: |
-      #     ctest --preset ${{ matrix.preset }} --config ${{ matrix.config }}
+      - name: Test
+        run: |
+          ctest --preset ${{ matrix.preset }}-${{ matrix.config }}
