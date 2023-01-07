@@ -6,3 +6,5 @@ DerivePointerAlignment: false
 PointerAlignment: Right
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
+IndentAccessModifiers: false
+AccessModifierOffset: -4

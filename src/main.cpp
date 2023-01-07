@@ -3,6 +3,8 @@
 
 #include <filesystem>
 
+#include "core/imageio.h"
+
 int main() {
     spdlog::info("just a test {}", 123);
 
@@ -12,17 +14,18 @@ int main() {
         if (it.is_regular_file()) {
             spdlog::info("reading {}", it.path());
 
-            // auto inp = OIIO::ImageInput::open(it.path());
-            // if (!inp)
-            //     continue;
-            // const OIIO::ImageSpec &spec = inp->spec();
-            // int xres = spec.width;
-            // int yres = spec.height;
-            // int channels = spec.nchannels;
-            // std::vector<float> pixels(xres * yres * channels);
-            // spdlog::info("image data size {}", pixels.size());
-            // inp->read_image(OIIO::TypeDesc::FLOAT, &pixels[0]);
-            // inp->close();
+            auto image = fr::ImageInput::open(it.path());
+            if (!image) {
+                spdlog::warn("failed to open {}", it.path());
+                continue;
+            }
+
+            const fr::ImageSpec &spec = image->get_spec();
+
+            spdlog::info("image size: {}x{}", spec.width, spec.height);
+
+            std::vector<uint8_t> pixels(spec.width * spec.height * spec.component_count);
+            image->read_image(pixels.data(), pixels.size());
         }
     }
 

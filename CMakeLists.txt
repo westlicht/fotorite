@@ -17,6 +17,8 @@ find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
+find_package(tinyxml2 CONFIG REQUIRED)
+find_package(TinyEXIF CONFIG REQUIRED)
 
 # -----------------------------------------------------------------------------
 # core library
@@ -24,9 +26,12 @@ find_package(PNG REQUIRED)
 add_library(core STATIC)
 target_sources(core PRIVATE
     src/libcore/core/core.cpp
+    src/libcore/core/imageio.cpp
 )
+target_include_directories(core PUBLIC src/libcore PRIVATE ${JPEG_INCLUDE_DIR})
 target_compile_features(core PUBLIC cxx_std_17)
-target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog)
+target_compile_definitions(core PRIVATE _CRT_SECURE_NO_WARNINGS)
+target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIF)
 
 if(MSVC)
     target_compile_options(core PUBLIC /W4 /WX)
