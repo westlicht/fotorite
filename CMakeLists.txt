@@ -8,6 +8,7 @@ option(FOTORITE_ENABLE_TESTS "Enable tests" ON)
 find_package(doctest CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(OpenEXR CONFIG REQUIRED)
 find_package(OpenImageIO CONFIG REQUIRED)
 
 add_executable(fotorite src/main.cpp)
