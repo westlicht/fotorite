@@ -89,9 +89,9 @@ jobs:
           cmake --preset ${{ matrix.preset }}
 
       # Build (Release configuration only) the whole project with Ninja (which is spawn by CMake).
-      - name: Build (Release configuration)
+      - name: Build
         run: |
-          cmake --build --preset ${{ matrix.preset }} --config ${{ matrix.config }}
+          cmake --build --preset ${{ matrix.preset }}-${{ matrix.config }}
 
       # Test the whole project with CTest, again Release configuration only.
       # - name: Test (Release configuration)
