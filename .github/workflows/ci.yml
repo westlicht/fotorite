@@ -9,7 +9,7 @@
 # custom GitHub actions, but leverages directly the tools that could be easily run on
 # your development machines (i.e. CMake, vcpkg, Ninja) to ensure a perfectly identical
 # and reproducible build locally (on your development machine) and remotely (on build agents).
-name: hosted-pure-workflow
+name: CI
 on:
   push:
     branches:
@@ -19,7 +19,7 @@ on:
 
 jobs:
   job:
-    name: ${{ matrix.os }}-${{ github.workflow }}
+    name: ${{ matrix.name }} (${{ matrix.preset}} - ${{ matrix.config }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -27,14 +27,17 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: windows-latest
+            name: Windows
             triplet: x64-windows
             preset: msvc
             config: Release
           - os: ubuntu-latest
+            name: Linux
             triplet: x64-linux
             preset: clang
             config: Release
           - os: macos-latest
+            name: macOS
             triplet: x64-osx
             preset: clang
             config: Release
