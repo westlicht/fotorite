@@ -2,9 +2,10 @@
     "name": "main",
     "version-string": "latest",
     "dependencies": [
+        "doctest",
         "fmt",
         "spdlog",
-        "openimageio",
-        "sqlite3"
+        "libjpeg-turbo",
+        "libpng"
     ]
 }
