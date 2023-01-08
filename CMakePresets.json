@@ -140,42 +140,55 @@
     ],
     "testPresets": [
         {
+            "name": "base",
+            "hidden": true,
+            "output": {"verbosity": "verbose"}
+        },
+        {
             "name": "windows-clang-release",
+            "inherits": "base",
             "configurePreset": "windows-clang",
             "configuration": "Release"
         },
         {
             "name": "windows-clang-debug",
+            "inherits": "base",
             "configurePreset": "windows-clang",
             "configuration": "Debug"
         },
         {
             "name": "windows-msvc-release",
+            "inherits": "base",
             "configurePreset": "windows-msvc",
             "configuration": "Release"
         },
         {
             "name": "windows-msvc-debug",
+            "inherits": "base",
             "configurePreset": "windows-msvc",
             "configuration": "Debug"
         },
         {
             "name": "linux-clang-release",
+            "inherits": "base",
             "configurePreset": "linux-clang",
             "configuration": "Release"
         },
         {
             "name": "linux-clang-debug",
+            "inherits": "base",
             "configurePreset": "linux-clang",
             "configuration": "Debug"
         },
         {
             "name": "macos-clang-release",
+            "inherits": "base",
             "configurePreset": "macos-clang",
             "configuration": "Release"
         },
         {
             "name": "macos-clang-debug",
+            "inherits": "base",
             "configurePreset": "macos-clang",
             "configuration": "Debug"
         }
