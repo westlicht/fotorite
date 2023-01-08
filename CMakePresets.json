@@ -1,8 +1,8 @@
 {
-    "version": 4,
+    "version": 3,
     "cmakeMinimumRequired": {
         "major": 3,
-        "minor": 23,
+        "minor": 22,
         "patch": 0
     },
     "configurePresets": [
@@ -51,6 +51,15 @@
             }
         },
         {
+            "name": "gcc",
+            "hidden": true,
+            "generator": "Ninja Multi-Config",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+        {
             "name": "msvc",
             "hidden": true,
             "generator": "Ninja Multi-Config",
@@ -85,6 +94,14 @@
                 "base",
                 "linux",
                 "clang"
+            ]
+        },
+        {
+            "name": "linux-gcc",
+            "inherits": [
+                "base",
+                "linux",
+                "gcc"
             ]
         },
         {
@@ -125,6 +142,16 @@
         {
             "name": "linux-clang-debug",
             "configurePreset": "linux-clang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-release",
+            "configurePreset": "linux-gcc",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-gcc-debug",
+            "configurePreset": "linux-gcc",
             "configuration": "Debug"
         },
         {
@@ -178,6 +205,18 @@
             "name": "linux-clang-debug",
             "inherits": "base",
             "configurePreset": "linux-clang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-release",
+            "inherits": "base",
+            "configurePreset": "linux-gcc",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-gcc-debug",
+            "inherits": "base",
+            "configurePreset": "linux-gcc",
             "configuration": "Debug"
         },
         {
