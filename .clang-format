@@ -8,3 +8,4 @@ AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 IndentAccessModifiers: false
 AccessModifierOffset: -4
+SortIncludes: false
