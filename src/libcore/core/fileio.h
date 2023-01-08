@@ -27,7 +27,7 @@ public:
     MemoryMappedFile() = default;
 
     /**
-     * Constructor opening a file. Use isOpen() to check if successful.
+     * Constructor opening a file. Use is_open() to check if successful.
      * @param path Path to open.
      * @param mapped_size Number of bytes to map into memory (automatically clamped to the file size).
      * @param access_hint Hint on how memory is accessed.
@@ -52,19 +52,19 @@ public:
     void close();
 
     /// True, if file successfully opened.
-    bool isOpen() const { return _mapped_data != nullptr; }
+    bool is_open() const { return _mapped_data != nullptr; }
 
     /// Get the file size in bytes.
-    size_t getSize() const { return _size; }
+    size_t size() const { return _size; }
 
     /// Get the mapped data.
-    const void *getData() const { return _mapped_data; };
+    const void *data() const { return _mapped_data; };
 
     /// Get the mapped memory size in bytes.
-    size_t getMappedSize() const { return _mapped_size; };
+    size_t mapped_size() const { return _mapped_size; };
 
     /// Get the OS page size (for remap).
-    static size_t getPageSize();
+    static size_t page_size();
 
 private:
     MemoryMappedFile(const MemoryMappedFile &) = delete;

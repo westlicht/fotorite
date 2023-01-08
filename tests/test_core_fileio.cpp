@@ -14,25 +14,25 @@ TEST_SUITE_BEGIN("fileio");
 TEST_CASE("MemoryMappedFile") {
     SUBCASE("closed") {
         MemoryMappedFile file;
-        CHECK_EQ(file.isOpen(), false);
-        CHECK_EQ(file.getSize(), 0);
-        CHECK_EQ(file.getData(), nullptr);
-        CHECK_EQ(file.getMappedSize(), 0);
+        CHECK_EQ(file.is_open(), false);
+        CHECK_EQ(file.size(), 0);
+        CHECK_EQ(file.data(), nullptr);
+        CHECK_EQ(file.mapped_size(), 0);
 
         // Allowed to close a closed file.
         file.close();
-        CHECK_EQ(file.isOpen(), false);
+        CHECK_EQ(file.is_open(), false);
     }
 
     SUBCASE("non existing") {
         {
             MemoryMappedFile file;
             CHECK_EQ(file.open("__file_that_does_not_exist__"), false);
-            CHECK_EQ(file.isOpen(), false);
+            CHECK_EQ(file.is_open(), false);
         }
         {
             MemoryMappedFile file("__file_that_does_not_exist__");
-            CHECK_EQ(file.isOpen(), false);
+            CHECK_EQ(file.is_open(), false);
         }
     }
 
@@ -53,34 +53,34 @@ TEST_CASE("MemoryMappedFile") {
         {
             // Map entire file.
             MemoryMappedFile file(tempPath);
-            CHECK_EQ(file.isOpen(), true);
-            CHECK_EQ(file.getSize(), randomData.size());
-            CHECK_NE(file.getData(), nullptr);
-            CHECK_GE(file.getMappedSize(), randomData.size());
-            CHECK(std::memcmp(file.getData(), randomData.data(), file.getSize()) == 0);
+            CHECK_EQ(file.is_open(), true);
+            CHECK_EQ(file.size(), randomData.size());
+            CHECK_NE(file.data(), nullptr);
+            CHECK_GE(file.mapped_size(), randomData.size());
+            CHECK(std::memcmp(file.data(), randomData.data(), file.size()) == 0);
         }
 
         {
             // Map first 1024 bytes.
             MemoryMappedFile file(tempPath, 1024);
-            CHECK_EQ(file.isOpen(), true);
-            CHECK_EQ(file.getSize(), randomData.size());
-            CHECK_NE(file.getData(), nullptr);
-            CHECK_GE(file.getMappedSize(), 1024);
-            CHECK(std::memcmp(file.getData(), randomData.data(), 1024) == 0);
+            CHECK_EQ(file.is_open(), true);
+            CHECK_EQ(file.size(), randomData.size());
+            CHECK_NE(file.data(), nullptr);
+            CHECK_GE(file.mapped_size(), 1024);
+            CHECK(std::memcmp(file.data(), randomData.data(), 1024) == 0);
         }
 
         {
             // Map first page.
-            size_t pageSize = MemoryMappedFile::getPageSize();
+            size_t pageSize = MemoryMappedFile::page_size();
             CHECK_GE(pageSize, 4096);
             REQUIRE_LE(pageSize, randomData.size());
             MemoryMappedFile file(tempPath, pageSize);
-            CHECK_EQ(file.isOpen(), true);
-            CHECK_EQ(file.getSize(), randomData.size());
-            CHECK_NE(file.getData(), nullptr);
-            CHECK_GE(file.getMappedSize(), pageSize);
-            CHECK(std::memcmp(file.getData(), randomData.data(), pageSize) == 0);
+            CHECK_EQ(file.is_open(), true);
+            CHECK_EQ(file.size(), randomData.size());
+            CHECK_NE(file.data(), nullptr);
+            CHECK_GE(file.mapped_size(), pageSize);
+            CHECK(std::memcmp(file.data(), randomData.data(), pageSize) == 0);
         }
 
         // Cleanup.

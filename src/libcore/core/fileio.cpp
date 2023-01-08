@@ -8,7 +8,14 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#elif FR_LINUX || FR_MACOS
+#elif FR_LINUX
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#elif FR_MACOS
+#define _DARWIN_USE_64_BIT_INODE
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -27,7 +34,7 @@ MemoryMappedFile::MemoryMappedFile(const std::filesystem::path &path, size_t map
 MemoryMappedFile::~MemoryMappedFile() { close(); }
 
 bool MemoryMappedFile::open(const std::filesystem::path &path, size_t mapped_size, AccessHint access_hint) {
-    if (isOpen())
+    if (is_open())
         return false;
 
     _path = path;
@@ -70,7 +77,7 @@ bool MemoryMappedFile::open(const std::filesystem::path &path, size_t mapped_siz
         return false;
     }
 
-#elif FR_LINUX || FR_MACOS
+#elif FR_LINUX
 
     // Open file.
     _file = ::open(path.c_str(), O_RDONLY | O_LARGEFILE);
@@ -80,12 +87,29 @@ bool MemoryMappedFile::open(const std::filesystem::path &path, size_t mapped_siz
     }
 
     // Get file size.
-    struct stat64 statInfo;
-    if (fstat64(_file, &statInfo) < 0) {
+    struct stat64 stat_info;
+    if (fstat64(_file, &stat_info) < 0) {
         close();
         return false;
     }
-    _size = statInfo.st_size;
+    _size = stat_info.st_size;
+
+#elif FR_MACOS
+
+    // Open file.
+    _file = ::open(path.c_str(), O_RDONLY);
+    if (_file == -1) {
+        _file = 0;
+        return false;
+    }
+
+    // Get file size.
+    struct stat stat_info;
+    if (fstat(_file, &stat_info) < 0) {
+        close();
+        return false;
+    }
+    _size = stat_info.st_size;
 
 #endif
 
@@ -129,7 +153,7 @@ void MemoryMappedFile::close() {
     _size = 0;
 }
 
-size_t MemoryMappedFile::getPageSize() {
+size_t MemoryMappedFile::page_size() {
 #if FR_WINDOWS
     SYSTEM_INFO sysInfo;
     GetSystemInfo(&sysInfo);
@@ -171,7 +195,11 @@ bool MemoryMappedFile::remap(uint64_t offset, size_t mapped_size) {
     _mapped_size = mapped_size;
 #elif FR_LINUX || FR_MACOS
     // Create new mapping.
+#if FR_LINUX
     _mapped_data = ::mmap64(NULL, mapped_size, PROT_READ, MAP_SHARED, _file, offset);
+#elif FR_MACOS
+    _mapped_data = ::mmap(NULL, mapped_size, PROT_READ, MAP_SHARED, _file, offset);
+#endif
     if (_mapped_data == MAP_FAILED) {
         _mapped_data = nullptr;
         return false;
@@ -194,9 +222,9 @@ bool MemoryMappedFile::remap(uint64_t offset, size_t mapped_size) {
             break;
     }
     ::madvise(_mapped_data, _mapped_size, advice);
-#endif
 
     return true;
+#endif
 }
 
 FR_NAMESPACE_END
