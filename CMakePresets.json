@@ -17,14 +17,15 @@
                 }
             },
             "environment": {
-                "VCPKG_ROOT": "./vcpkg"
+                "VCPKG_ROOT": "${sourceDir}/vcpkg",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/vcpkg-overlay/triplets"
             }
         },
         {
             "name": "windows",
             "hidden": true,
             "cacheVariables": {
-                "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-custom"
             }
         },
         {

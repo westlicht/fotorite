@@ -1,18 +1,40 @@
 #include <fmt/std.h>
 #include <spdlog/spdlog.h>
+#include <nanogui/nanogui.h>
 
 #include <filesystem>
 
 #include "core/imageio.h"
+#include "core/timer.h"
+
+static void guitest() {
+    nanogui::init();
+
+    {
+        nanogui::ref<nanogui::Screen> screen;
+        screen = new nanogui::Screen(nanogui::Vector2i(500, 700), "NanoGUI test");
+
+        screen->set_visible(true);
+        screen->perform_layout();
+
+        nanogui::mainloop(-1);
+    }
+
+    nanogui::shutdown();
+}
 
 int main() {
     spdlog::info("just a test {}", 123);
+
+    guitest();
 
     std::filesystem::path root_dir{"C:/projects/fotorite/photos"};
 
     for (const auto &it : std::filesystem::directory_iterator{root_dir}) {
         if (it.is_regular_file()) {
             spdlog::info("reading {}", it.path());
+
+            fr::Timer timer;
 
             auto image = fr::ImageInput::open(it.path());
             if (!image) {
@@ -26,6 +48,8 @@ int main() {
 
             std::vector<uint8_t> pixels(spec.width * spec.height * spec.component_count);
             image->read_image(pixels.data(), pixels.size());
+
+            spdlog::info("loading took {} ms", timer.elapsed() * 1000.0);
         }
     }
 
