@@ -20,6 +20,13 @@ find_package(PNG REQUIRED)
 find_package(tinyxml2 CONFIG REQUIRED)
 find_package(TinyEXIF CONFIG REQUIRED)
 
+# nanogui
+set(NANOGUI_BUILD_EXAMPLES ON)
+set(NANOGUI_BUILD_SHARED OFF)
+set(NANOGUI_BUILD_PYTHON OFF)
+set(NANOGUI_INSTALL OFF)
+add_subdirectory(ext/nanogui)
+
 # -----------------------------------------------------------------------------
 # core library
 # -----------------------------------------------------------------------------
@@ -45,7 +52,7 @@ endif()
 # application
 # -----------------------------------------------------------------------------
 add_executable(fotorite src/main.cpp)
-target_link_libraries(fotorite PRIVATE core)
+target_link_libraries(fotorite PRIVATE core nanogui)
 set_property(TARGET fotorite PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # -----------------------------------------------------------------------------
