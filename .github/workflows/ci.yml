@@ -28,17 +28,14 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-            triplet: x64-windows-static
             preset: windows-msvc
             config: release
           - os: ubuntu-latest
             name: Linux
-            triplet: x64-linux
-            preset: linux-clang
+            preset: linux-gcc
             config: release
           - os: macos-latest
             name: macOS
-            triplet: x64-osx
             preset: macos-clang
             config: release
     env:
@@ -48,9 +45,12 @@ jobs:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
 
     steps:
+      - name: Install dependencies (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev libxrandr-dev
       - uses: actions/checkout@v3
         with:
-          submodules: true
+          submodules: recursive
       - name: "Create directory '${{ env.VCPKG_DEFAULT_BINARY_CACHE }}'"
         shell: bash
         run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
@@ -59,7 +59,7 @@ jobs:
       - uses: lukka/get-cmake@latest
 
       # Restore both vcpkg and its artifacts from the GitHub cache service.
-      - name: Restore vcpkg and its artifacts.
+      - name: Restore vcpkg and its artifacts
         uses: actions/cache@v3
         with:
           # The first path is the location of vcpkg: it contains the vcpkg executable and data files, as long as the
@@ -77,7 +77,7 @@ jobs:
           # The vcpkg's commit id would suffice, but computing an hash out it does not harm.
           # Note: given a key, the cache content is immutable. If a cache entry has been created improperly, in order the recreate the right content the key must be changed as well, and it must be brand new (i.e. not existing already).
           key: |
-            ${{ hashFiles( 'vcpkg.json' ) }}-${{ hashFiles( '.git/modules/vcpkg/HEAD' )}}-${{ matrix.triplet }}
+            ${{ hashFiles( 'CMakePresets.json', 'vcpkg.json', '.git/modules/vcpkg/HEAD' )}}-${{ matrix.preset }}
 
       # On Windows runners, let's ensure to have the Developer Command Prompt environment setup correctly.
       # As used here the Developer Command Prompt created is targeting x64 and using the default the Windows SDK.
