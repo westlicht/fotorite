@@ -128,7 +128,7 @@ void MemoryMappedFile::close() {
 #if FR_WINDOWS
         ::UnmapViewOfFile(_mapped_data);
 #elif FR_LINUX || FR_MACOS
-        ::munmap(_mapped_data, _size);
+        ::munmap(_mapped_data, _mapped_size);
 #endif
         _mapped_data = nullptr;
     }
