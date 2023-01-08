@@ -28,18 +28,18 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-            triplet: x64-windows
-            preset: msvc
+            triplet: x64-windows-static
+            preset: windows-msvc
             config: release
           - os: ubuntu-latest
             name: Linux
             triplet: x64-linux
-            preset: clang
+            preset: linux-clang
             config: release
           - os: macos-latest
             name: macOS
             triplet: x64-osx
-            preset: clang
+            preset: macos-clang
             config: release
     env:
       # Indicates the location of the vcpkg as a Git submodule of the project repository.
