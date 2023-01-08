@@ -2,9 +2,10 @@
 
 #include <doctest/doctest.h>
 
-#include <vector>
+#include <cstring>
 #include <fstream>
 #include <random>
+#include <vector>
 
 using namespace fr;
 
