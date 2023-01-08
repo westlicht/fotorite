@@ -21,8 +21,29 @@
             }
         },
         {
+            "name": "windows",
+            "hidden": true,
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+            }
+        },
+        {
+            "name": "linux",
+            "hidden": true,
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-linux"
+            }
+        },
+        {
+            "name": "macos",
+            "hidden": true,
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-osx"
+            }
+        },
+        {
             "name": "clang",
-            "inherits": "base",
+            "hidden": true,
             "generator": "Ninja Multi-Config",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "clang",
@@ -31,7 +52,7 @@
         },
         {
             "name": "msvc",
-            "inherits": "base",
+            "hidden": true,
             "generator": "Ninja Multi-Config",
             "architecture": {
                 "value": "x64",
@@ -41,49 +62,121 @@
                 "CMAKE_C_COMPILER": "cl",
                 "CMAKE_CXX_COMPILER": "cl"
             }
+        },
+        {
+            "name": "windows-clang",
+            "inherits": [
+                "base",
+                "windows",
+                "clang"
+            ]
+        },
+        {
+            "name": "windows-msvc",
+            "inherits": [
+                "base",
+                "windows",
+                "msvc"
+            ]
+        },
+        {
+            "name": "linux-clang",
+            "inherits": [
+                "base",
+                "linux",
+                "clang"
+            ]
+        },
+        {
+            "name": "macos-clang",
+            "inherits": [
+                "base",
+                "macos",
+                "clang"
+            ]
         }
     ],
     "buildPresets": [
         {
-            "name": "clang-release",
-            "configurePreset": "clang",
+            "name": "windows-clang-release",
+            "configurePreset": "windows-clang",
             "configuration": "Release"
         },
         {
-            "name": "clang-debug",
-            "configurePreset": "clang",
+            "name": "windows-clang-debug",
+            "configurePreset": "windows-clang",
             "configuration": "Debug"
         },
         {
-            "name": "msvc-release",
-            "configurePreset": "msvc",
+            "name": "windows-msvc-release",
+            "configurePreset": "windows-msvc",
             "configuration": "Release"
         },
         {
-            "name": "msvc-debug",
-            "configurePreset": "msvc",
+            "name": "windows-msvc-debug",
+            "configurePreset": "windows-msvc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-clang-release",
+            "configurePreset": "linux-clang",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-clang-debug",
+            "configurePreset": "linux-clang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-clang-release",
+            "configurePreset": "macos-clang",
+            "configuration": "Release"
+        },
+        {
+            "name": "macos-clang-debug",
+            "configurePreset": "macos-clang",
             "configuration": "Debug"
         }
     ],
     "testPresets": [
         {
-            "name": "clang-release",
-            "configurePreset": "clang",
+            "name": "windows-clang-release",
+            "configurePreset": "windows-clang",
             "configuration": "Release"
         },
         {
-            "name": "clang-debug",
-            "configurePreset": "clang",
+            "name": "windows-clang-debug",
+            "configurePreset": "windows-clang",
             "configuration": "Debug"
         },
         {
-            "name": "msvc-release",
-            "configurePreset": "msvc",
+            "name": "windows-msvc-release",
+            "configurePreset": "windows-msvc",
             "configuration": "Release"
         },
         {
-            "name": "msvc-debug",
-            "configurePreset": "msvc",
+            "name": "windows-msvc-debug",
+            "configurePreset": "windows-msvc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-clang-release",
+            "configurePreset": "linux-clang",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-clang-debug",
+            "configurePreset": "linux-clang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-clang-release",
+            "configurePreset": "macos-clang",
+            "configuration": "Release"
+        },
+        {
+            "name": "macos-clang-debug",
+            "configurePreset": "macos-clang",
             "configuration": "Debug"
         }
     ]
