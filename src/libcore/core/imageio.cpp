@@ -7,11 +7,15 @@
 #include <TinyEXIF.h>
 // clang-format on
 
-#include <string>
 #include <cctype>
 #include <cstring>
+#include <string>
 
 FR_NAMESPACE_BEGIN
+
+// ----------------------------------------------------------------------------
+// ImageReader
+// ----------------------------------------------------------------------------
 
 class ImageReader {
 public:
@@ -21,6 +25,10 @@ public:
     virtual bool read_spec(ImageSpec &spec) = 0;
     virtual bool read_image(void *buffer, size_t len) = 0;
 };
+
+// ----------------------------------------------------------------------------
+// JPEGReader
+// ----------------------------------------------------------------------------
 
 class JPEGReader : public ImageReader {
 public:
@@ -99,6 +107,16 @@ private:
     jpeg_error_mgr _err;
     FILE *_file{0};
 };
+
+// ----------------------------------------------------------------------------
+// PNGReader
+// ----------------------------------------------------------------------------
+
+class PNGReader : public ImageReader {};
+
+// ----------------------------------------------------------------------------
+// ImageInput
+// ----------------------------------------------------------------------------
 
 std::unique_ptr<ImageInput> ImageInput::open(const std::filesystem::path &path) {
     if (!std::filesystem::exists(path))

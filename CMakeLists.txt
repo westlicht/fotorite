@@ -26,11 +26,12 @@ find_package(TinyEXIF CONFIG REQUIRED)
 add_library(core STATIC)
 target_sources(core PRIVATE
     src/libcore/core/core.cpp
+    src/libcore/core/fileio.cpp
     src/libcore/core/imageio.cpp
 )
 target_include_directories(core PUBLIC src/libcore PRIVATE ${JPEG_INCLUDE_DIR})
 target_compile_features(core PUBLIC cxx_std_17)
-target_compile_definitions(core PRIVATE _CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(core PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE)
 target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic)
 set_property(TARGET core PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
