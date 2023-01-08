@@ -222,9 +222,9 @@ bool MemoryMappedFile::remap(uint64_t offset, size_t mapped_size) {
             break;
     }
     ::madvise(_mapped_data, _mapped_size, advice);
+#endif
 
     return true;
-#endif
 }
 
 FR_NAMESPACE_END

@@ -56,7 +56,7 @@ if(FOTORITE_ENABLE_TESTS)
 
     add_executable(fotorite_tests
         tests/test_main.cpp
-        tests/test_core_fileio.cpp
+        tests/libcore/core/test_fileio.cpp
     )
     target_link_libraries(fotorite_tests PRIVATE core doctest::doctest)
     set_property(TARGET fotorite_tests PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
