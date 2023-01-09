@@ -6,8 +6,11 @@
 
 #include "core/imageio.h"
 #include "core/timer.h"
+#include "model/catalog.h"
 
-static void guitest() {
+FR_NAMESPACE_BEGIN
+
+static void test_gui() {
     nanogui::init();
 
     {
@@ -23,11 +26,17 @@ static void guitest() {
     nanogui::shutdown();
 }
 
+static void test_catalog() { Catalog catalog{"C:/projects/fotorite/photos"}; }
+
+FR_NAMESPACE_END
+
 int main() {
-    spdlog::info("just a test {}", 123);
+    spdlog::info("fotorite");
 
-    guitest();
+    fr::test_catalog();
+    // fr::test_gui();
 
+#if 0
     std::filesystem::path root_dir{"C:/projects/fotorite/photos"};
 
     for (const auto &it : std::filesystem::directory_iterator{root_dir}) {
@@ -52,6 +61,6 @@ int main() {
             spdlog::info("loading took {} ms", timer.elapsed() * 1000.0);
         }
     }
-
+#endif
     return 0;
 }
