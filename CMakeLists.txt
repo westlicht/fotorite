@@ -33,6 +33,7 @@ add_subdirectory(ext/nanogui)
 # -----------------------------------------------------------------------------
 add_library(core STATIC)
 target_sources(core PRIVATE
+    src/app/main_screen.cpp
     src/core/core.cpp
     src/core/fileio.cpp
     src/core/imageio.cpp

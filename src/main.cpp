@@ -7,6 +7,7 @@
 #include "core/imageio.h"
 #include "core/timer.h"
 #include "model/catalog.h"
+#include "app/main_screen.h"
 
 FR_NAMESPACE_BEGIN
 
@@ -14,8 +15,8 @@ static void test_gui() {
     nanogui::init();
 
     {
-        nanogui::ref<nanogui::Screen> screen;
-        screen = new nanogui::Screen(nanogui::Vector2i(500, 700), "fotorite");
+        nanogui::ref<MainScreen> screen;
+        screen = new MainScreen();
 
         screen->set_visible(true);
         screen->perform_layout();
@@ -33,8 +34,8 @@ FR_NAMESPACE_END
 int main() {
     spdlog::info("fotorite");
 
-    fr::test_catalog();
-    // fr::test_gui();
+    // fr::test_catalog();
+    fr::test_gui();
 
 #if 0
     std::filesystem::path root_dir{"C:/projects/fotorite/photos"};
