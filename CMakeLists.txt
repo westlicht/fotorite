@@ -19,6 +19,7 @@ find_package(JPEG REQUIRED)
 find_package(PNG REQUIRED)
 find_package(tinyxml2 CONFIG REQUIRED)
 find_package(TinyEXIF CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 # nanogui
 set(NANOGUI_BUILD_EXAMPLES ON)
@@ -39,7 +40,7 @@ target_sources(core PRIVATE
 target_include_directories(core PUBLIC src/libcore PRIVATE ${JPEG_INCLUDE_DIR})
 target_compile_features(core PUBLIC cxx_std_17)
 target_compile_definitions(core PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE)
-target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic)
+target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json nanogui PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic)
 
 if(MSVC)
     target_compile_options(core PUBLIC /W4 /WX)
@@ -51,7 +52,7 @@ endif()
 # application
 # -----------------------------------------------------------------------------
 add_executable(fotorite src/main.cpp)
-target_link_libraries(fotorite PRIVATE core nanogui)
+target_link_libraries(fotorite PRIVATE core)
 
 # -----------------------------------------------------------------------------
 # tests

@@ -12,12 +12,12 @@ static void guitest() {
 
     {
         nanogui::ref<nanogui::Screen> screen;
-        screen = new nanogui::Screen(nanogui::Vector2i(500, 700), "NanoGUI test");
+        screen = new nanogui::Screen(nanogui::Vector2i(500, 700), "fotorite");
 
         screen->set_visible(true);
         screen->perform_layout();
 
-        nanogui::mainloop(-1);
+        nanogui::mainloop();
     }
 
     nanogui::shutdown();
