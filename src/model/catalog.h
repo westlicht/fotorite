@@ -4,6 +4,8 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
+#include <vector>
 
 FR_NAMESPACE_BEGIN
 
