@@ -1,4 +1,5 @@
 #include "imageio.h"
+#include "fileio.h"
 
 // clang-format off
 #include <cstdio> // must be included before jpeglib.h
@@ -22,6 +23,7 @@ public:
     virtual ~ImageReader() {}
 
     virtual bool open(const std::filesystem::path &path) = 0;
+    virtual bool open(const void *buffer, size_t len) = 0;
     virtual bool read_spec(ImageSpec &spec) = 0;
     virtual bool read_image(void *buffer, size_t len) = 0;
 };
@@ -58,12 +60,22 @@ public:
         }
     }
 
-    void close() {
-        if (!_file)
-            return;
+    bool open(const void *buffer, size_t len) override {
+        jpeg_mem_src(&_info, reinterpret_cast<const uint8_t *>(buffer), static_cast<unsigned long>(len));
 
-        fclose(_file);
-        _file = NULL;
+        try {
+            jpeg_read_header(&_info, TRUE);
+            return true;
+        } catch (jpeg_error_mgr *) {
+            return false;
+        }
+    }
+
+    void close() {
+        if (_file) {
+            fclose(_file);
+            _file = NULL;
+        }
     }
 
     bool read_spec(ImageSpec &spec) override {
@@ -135,8 +147,17 @@ std::unique_ptr<ImageInput> ImageInput::open(const std::filesystem::path &path) 
     if (!reader)
         return nullptr;
 
+    MemoryMappedFile file(path);
+    if (!file.is_open())
+        return nullptr;
+
+#if 0
     if (!reader->open(path))
         return nullptr;
+#else
+    if (!reader->open(file.data(), file.mapped_size()))
+        return nullptr;
+#endif
 
     ImageSpec spec;
     if (!reader->read_spec(spec))
