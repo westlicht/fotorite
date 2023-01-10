@@ -16,7 +16,8 @@
             },
             "program": "${command:cmake.launchTargetPath}",
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "visualizerFile": "${workspaceFolder}/src/fotorite.natvis"
         }
     ]
 }

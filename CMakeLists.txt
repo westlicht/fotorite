@@ -36,6 +36,8 @@ target_sources(core PRIVATE
     src/core/core.cpp
     src/core/fileio.cpp
     src/core/imageio.cpp
+    src/core/properties.cpp
+    src/core/settings.cpp
     src/model/catalog.cpp
     src/ui/catalog_view.cpp
     src/ui/main_screen.cpp
@@ -48,9 +50,9 @@ target_compile_options(core PUBLIC
     $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4 /WX>
     $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/wd4505 /wd4189 /wd4244>
     $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wall -Wextra -Wpedantic -Werror>
-    $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wno-unused-function -Wno-unused-variable -Wno-gnu-anonymous-struct -Wno-nested-anon-types>
+    $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable -Wno-gnu-anonymous-struct -Wno-nested-anon-types>
     $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wall -Wextra -Werror>
-    $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-unused-function -Wno-unused-variable>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable>
 )
 target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json nanogui PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic)
 
@@ -69,6 +71,7 @@ if(FOTORITE_ENABLE_TESTS)
     add_executable(fotorite_tests
         src/tests.cpp
         src/core/fileio_tests.cpp
+        src/core/properties_tests.cpp
     )
     target_link_libraries(fotorite_tests PRIVATE core doctest::doctest)
 
