@@ -12,8 +12,13 @@ FR_NAMESPACE_BEGIN
 
 class Properties {
 public:
+    using json = nlohmann::ordered_json;
+
     Properties();
+    Properties(const json &j);
     ~Properties();
+
+    const json &json_value() const;
 
     bool has(const char *name) const;
 
@@ -24,7 +29,7 @@ public:
     void set(const char *name, const T &value);
 
 private:
-    std::unique_ptr<nlohmann::ordered_json> _json;
+    std::unique_ptr<json> _json;
 };
 
 #define ACCESSOR_DECL(T)                                 \

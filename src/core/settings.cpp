@@ -4,8 +4,6 @@
 
 #include <fstream>
 
-using json = nlohmann::ordered_json;
-
 FR_NAMESPACE_BEGIN
 
 Settings::Settings() { _json = std::make_unique<json>(); }
@@ -27,6 +25,16 @@ bool Settings::save(const std::filesystem::path &path) {
 
     ofs << _json->dump(4);
     return true;
+}
+
+Properties Settings::get(const char *section) const {
+    auto it = _json->find(section);
+    auto j = it != _json->end() ? *it : nlohmann::ordered_json{};
+    return Properties(j);
+}
+
+void Settings::set(const char *section, const Properties &props) {
+    _json->operator[](section) = props.json_value();
 }
 
 FR_NAMESPACE_END

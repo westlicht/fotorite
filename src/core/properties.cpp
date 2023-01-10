@@ -4,7 +4,7 @@
 
 #include <fstream>
 
-using json = nlohmann::ordered_json;
+using json = fr::Properties::json;
 
 namespace nanogui {
 template <typename T, size_t N>
@@ -28,7 +28,10 @@ void from_json(const json &j, Array<T, N> &a) {
 FR_NAMESPACE_BEGIN
 
 Properties::Properties() { _json = std::make_unique<json>(); }
+Properties::Properties(const nlohmann::ordered_json &j) { _json = std::make_unique<json>(j); }
 Properties::~Properties() {}
+
+const Properties::json &Properties::json_value() const { return *_json; }
 
 bool Properties::has(const char *name) const { return _json->find(name) != _json->end(); }
 
