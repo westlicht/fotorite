@@ -6,6 +6,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <memory>
+#include <string>
 
 FR_NAMESPACE_BEGIN
 
@@ -13,6 +14,8 @@ class Properties {
 public:
     Properties();
     ~Properties();
+
+    bool has(const char *name) const;
 
     template <typename T>
     T get(const char *name, const T &default_value) const;
@@ -30,13 +33,14 @@ private:
     template <>                                          \
     void Properties::set<T>(const char *, const T &);
 
-ACCESSOR_DECL(int)
 ACCESSOR_DECL(bool)
+ACCESSOR_DECL(int)
 ACCESSOR_DECL(nanogui::Vector2i)
 ACCESSOR_DECL(nanogui::Vector3i)
 ACCESSOR_DECL(float)
 ACCESSOR_DECL(nanogui::Vector2f)
 ACCESSOR_DECL(nanogui::Vector3f)
+ACCESSOR_DECL(std::string)
 
 #undef ACCESSOR_DECL
 

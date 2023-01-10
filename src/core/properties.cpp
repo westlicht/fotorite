@@ -30,6 +30,8 @@ FR_NAMESPACE_BEGIN
 Properties::Properties() { _json = std::make_unique<json>(); }
 Properties::~Properties() {}
 
+bool Properties::has(const char *name) const { return _json->find(name) != _json->end(); }
+
 #define ACCESSOR_IMPL(T)                                               \
     template <>                                                        \
     T Properties::get<T>(const char *name, const T &def_value) const { \
@@ -51,5 +53,6 @@ ACCESSOR_IMPL(nanogui::Vector3i)
 ACCESSOR_IMPL(float)
 ACCESSOR_IMPL(nanogui::Vector2f)
 ACCESSOR_IMPL(nanogui::Vector3f)
+ACCESSOR_IMPL(std::string)
 
 FR_NAMESPACE_END
