@@ -9,17 +9,24 @@ FR_NAMESPACE_BEGIN
 MainScreen::MainScreen() : nanogui::Screen(Vector2i(500, 700), "fotorite") {
     _left_panel = add<Panel>();
     _left_panel->set_fixed_width(200);
+
     _right_panel = add<Panel>();
     _right_panel->set_fixed_width(100);
+
     _top_panel = add<Panel>();
     _top_panel->set_fixed_height(50);
+
     _bottom_panel = add<Panel>();
     _bottom_panel->set_fixed_height(30);
 
-    _catalog_view = add<CatalogView>();
+    _main_panel = add<Panel>(Color(0.1f, 1.f));
+
     auto label = _top_panel->add<Label>("FOTORITE");
     label->set_position(Vector2i(10, 10));
+    label->set_font("sans-bold");
     label->set_font_size(30);
+
+    _catalog_view = _main_panel->add<CatalogView>();
 
     set_resize_callback([this](Vector2i) { update_layout(); });
 
@@ -52,6 +59,14 @@ void MainScreen::update_layout() {
 
     _bottom_panel->set_position(Vector2i(0, screen_height - bottom_height));
     _bottom_panel->set_fixed_width(screen_width);
+
+    _main_panel->set_position(Vector2i(left_width, top_height));
+    _main_panel->set_fixed_width(screen_width - left_width - right_width);
+    _main_panel->set_fixed_height(screen_height - top_height - bottom_height);
+
+    if (auto child = _main_panel->child_at(0)) {
+        child->set_fixed_size(_main_panel->fixed_size());
+    }
 
     this->perform_layout();
 

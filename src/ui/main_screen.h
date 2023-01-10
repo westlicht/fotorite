@@ -19,6 +19,7 @@ private:
     Panel *_right_panel;
     Panel *_top_panel;
     Panel *_bottom_panel;
+    Panel *_main_panel;
 
     CatalogView *_catalog_view;
 };
