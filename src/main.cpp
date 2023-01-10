@@ -7,7 +7,7 @@
 #include "core/imageio.h"
 #include "core/timer.h"
 #include "model/catalog.h"
-#include "app/main_screen.h"
+#include "ui/main_screen.h"
 
 FR_NAMESPACE_BEGIN
 
