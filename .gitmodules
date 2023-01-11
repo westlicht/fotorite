@@ -3,4 +3,4 @@
 	url = https://github.com/microsoft/vcpkg.git
 [submodule "ext/nanogui"]
 	path = ext/nanogui
-	url = https://github.com/mitsuba-renderer/nanogui.git
+	url = https://github.com/westlicht/nanogui.git
