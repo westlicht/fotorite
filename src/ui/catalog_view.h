@@ -13,6 +13,7 @@ class CatalogView : public Widget {
 public:
     CatalogView(Widget *parent);
 
+    virtual void draw(NVGcontext *ctx) override;
     virtual void perform_layout(NVGcontext *ctx) override;
 
 private:
