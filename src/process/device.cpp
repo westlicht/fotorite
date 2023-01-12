@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 #include <fmt/core.h>
 
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
