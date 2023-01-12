@@ -9,6 +9,8 @@
         "libpng",
         "tinyexif",
         "nlohmann-json",
-        "bshoshany-thread-pool"
+        "bshoshany-thread-pool",
+        "vulkan-headers",
+        "volk"
     ]
 }

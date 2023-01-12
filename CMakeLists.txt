@@ -20,6 +20,8 @@ find_package(PNG REQUIRED)
 find_package(tinyxml2 CONFIG REQUIRED)
 find_package(TinyEXIF CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(VulkanHeaders CONFIG REQUIRED)
+find_package(volk CONFIG REQUIRED)
 
 find_path(BS_THREAD_POOL_INCLUDE_DIRS "BS_thread_pool.hpp")
 add_library(BS_thread_pool INTERFACE)
@@ -45,6 +47,7 @@ target_sources(core PRIVATE
     src/core/stringutils.cpp
     src/model/document.cpp
     src/model/catalog.cpp
+    src/process/device.cpp
     src/ui/catalog_view.cpp
     src/ui/main_screen.cpp
     src/ui/panel.cpp
@@ -60,7 +63,7 @@ target_compile_options(core PUBLIC
     $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wall -Wextra -Werror>
     $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable>
 )
-target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json nanogui PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic BS_thread_pool)
+target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json nanogui PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic BS_thread_pool Vulkan::Headers volk::volk)
 
 # -----------------------------------------------------------------------------
 # application
