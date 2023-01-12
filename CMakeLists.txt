@@ -59,9 +59,9 @@ target_compile_options(core PUBLIC
     $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4 /WX>
     $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/wd4505 /wd4189 /wd4244 /wd4100>
     $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wall -Wextra -Wpedantic -Werror>
-    $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable -Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wnomissing-field-initializers>
+    $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable -Wno-gnu-anonymous-struct -Wno-nested-anon-types -Wno-missing-field-initializers>
     $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wall -Wextra -Werror>
-    $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable -Wno-missing-field-initializers>
 )
 target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json nanogui PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic BS_thread_pool Vulkan::Headers volk::volk)
 
