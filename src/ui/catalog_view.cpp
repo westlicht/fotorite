@@ -40,7 +40,6 @@ private:
 
 CatalogView::CatalogView(Widget *parent) : Widget(parent) {
     _scroll_panel = add<VScrollPanel>();
-    _scroll_panel->set_scroll_callback([](float) { });
 
     _panel = _scroll_panel->add<Panel>(Color(0.1f, 1.f));
 
