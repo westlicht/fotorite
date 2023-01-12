@@ -22,6 +22,9 @@
 #define FR_NAMESPACE_BEGIN namespace fr {
 #define FR_NAMESPACE_END }
 
+
+#define FR_ASSERT(c)
+
 FR_NAMESPACE_BEGIN
 
 //! Ignore unused parameters.

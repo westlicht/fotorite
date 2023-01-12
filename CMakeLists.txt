@@ -42,6 +42,8 @@ target_sources(core PRIVATE
     src/core/imageio.cpp
     src/core/properties.cpp
     src/core/settings.cpp
+    src/core/stringutils.cpp
+    src/model/document.cpp
     src/model/catalog.cpp
     src/ui/catalog_view.cpp
     src/ui/main_screen.cpp
@@ -75,8 +77,10 @@ if(FOTORITE_ENABLE_TESTS)
     add_executable(fotorite_tests
         src/tests.cpp
         src/core/fileio_tests.cpp
+        src/core/imageio_tests.cpp
         src/core/properties_tests.cpp
         src/core/settings_tests.cpp
+        src/core/stringutils_tests.cpp
     )
     target_link_libraries(fotorite_tests PRIVATE core doctest::doctest)
 
