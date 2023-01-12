@@ -9,3 +9,7 @@ AllowShortLoopsOnASingleLine: false
 IndentAccessModifiers: false
 AccessModifierOffset: -4
 SortIncludes: false
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
