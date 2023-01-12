@@ -161,7 +161,7 @@ public:
         return true;
     }
 
-    bool write_image(const void *buffer, size_t len)
+    bool write_image(const void *buffer, size_t len) override
     {
         const uint8_t *src = reinterpret_cast<const uint8_t *>(buffer);
         try {
@@ -169,8 +169,6 @@ public:
 
             int row_stride = m_info.image_width * m_info.input_components;
             JSAMPROW row[1];
-            if (!row)
-                throw std::bad_alloc();
 
             while (m_info.next_scanline < m_info.image_height) {
                 row[0] = const_cast<JSAMPROW>(src);
