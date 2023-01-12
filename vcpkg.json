@@ -8,6 +8,7 @@
         "libjpeg-turbo",
         "libpng",
         "tinyexif",
-        "nlohmann-json"
+        "nlohmann-json",
+        "bshoshany-thread-pool"
     ]
 }

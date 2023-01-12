@@ -21,6 +21,10 @@ find_package(tinyxml2 CONFIG REQUIRED)
 find_package(TinyEXIF CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
+find_path(BS_THREAD_POOL_INCLUDE_DIRS "BS_thread_pool.hpp")
+add_library(BS_thread_pool INTERFACE)
+target_include_directories(BS_thread_pool INTERFACE ${BS_THREAD_POOL_INCLUDE_DIRS})
+
 # nanogui
 set(NANOGUI_BUILD_EXAMPLES ON)
 set(NANOGUI_BUILD_SHARED OFF)
@@ -44,17 +48,17 @@ target_sources(core PRIVATE
     src/ui/panel.cpp
 )
 target_include_directories(core PUBLIC src PRIVATE ${JPEG_INCLUDE_DIR})
-target_compile_features(core PUBLIC cxx_std_17)
+target_compile_features(core PUBLIC cxx_std_20)
 target_compile_definitions(core PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE)
 target_compile_options(core PUBLIC
     $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4 /WX>
-    $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/wd4505 /wd4189 /wd4244>
+    $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/wd4505 /wd4189 /wd4244 /wd4100>
     $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wall -Wextra -Wpedantic -Werror>
     $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable -Wno-gnu-anonymous-struct -Wno-nested-anon-types>
     $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wall -Wextra -Werror>
     $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-unused-function -Wno-unused-parameter -Wno-unused-variable>
 )
-target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json nanogui PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic)
+target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json nanogui PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic BS_thread_pool)
 
 # -----------------------------------------------------------------------------
 # application
