@@ -11,8 +11,6 @@
 #include <stdexcept>
 #include <vector>
 
-static const bool ENABLE_VALIDATION_LAYERS = true;
-
 #define VK_CHECK(call)                                                                                            \
     if (VkResult result = call; result != VK_SUCCESS) {                                                           \
         throw std::runtime_error(                                                                                 \
@@ -30,18 +28,38 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverity
     return VK_FALSE;
 }
 
+struct BufferImpl {
+    BufferDesc desc;
+    VkBuffer buffer;
+};
+
+struct ImageImpl {
+    ImageDesc desc;
+    VkImage image;
+};
+
+struct PipelineImpl {
+    PipelineDesc desc;
+    VkPipeline pipeline;
+};
+
 struct DeviceImpl {
-    DeviceImpl();
+    DeviceImpl(const DeviceDesc &desc);
     ~DeviceImpl();
 
+    DeviceDesc desc;
     VkInstance instance{VK_NULL_HANDLE};
     VkDebugUtilsMessengerEXT debug_messenger{VK_NULL_HANDLE};
     VkPhysicalDevice physical_device{VK_NULL_HANDLE};
     VkDevice device{VK_NULL_HANDLE};
     VkQueue queue;
+
+    Pool<BufferImpl, BufferHandle> buffers;
+    Pool<ImageImpl, ImageHandle> images;
+    Pool<PipelineImpl, PipelineHandle> pipelines;
 };
 
-DeviceImpl::DeviceImpl()
+DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
 {
     VK_CHECK(volkInitialize());
 
@@ -52,7 +70,7 @@ DeviceImpl::DeviceImpl()
     vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
 
     std::vector<const char *> validation_layers;
-    if (ENABLE_VALIDATION_LAYERS) {
+    if (desc.enable_validation_layers) {
         validation_layers.emplace_back("VK_LAYER_KHRONOS_validation");
     }
 
@@ -71,7 +89,7 @@ DeviceImpl::DeviceImpl()
 
     std::vector<const char *> required_extensions;
     // required_extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-    if (ENABLE_VALIDATION_LAYERS) {
+    if (desc.enable_validation_layers) {
         required_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
@@ -84,7 +102,7 @@ DeviceImpl::DeviceImpl()
     instance_info.ppEnabledLayerNames = validation_layers.data();
 
     VkDebugUtilsMessengerCreateInfoEXT debug_info{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-    if (ENABLE_VALIDATION_LAYERS) {
+    if (desc.enable_validation_layers) {
         debug_info.messageSeverity =
             VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -98,7 +116,7 @@ DeviceImpl::DeviceImpl()
     VK_CHECK(vkCreateInstance(&instance_info, nullptr, &instance));
     volkLoadInstance(instance);
 
-    if (ENABLE_VALIDATION_LAYERS) {
+    if (desc.enable_validation_layers) {
         VK_CHECK(vkCreateDebugUtilsMessengerEXT(instance, &debug_info, nullptr, &debug_messenger));
     }
 
@@ -146,7 +164,7 @@ DeviceImpl::DeviceImpl()
         device_info.pQueueCreateInfos = &queue_info;
         device_info.queueCreateInfoCount = 1;
         device_info.pEnabledFeatures = &device_features;
-        if (ENABLE_VALIDATION_LAYERS) {
+        if (desc.enable_validation_layers) {
             device_info.enabledLayerCount = static_cast<uint32_t>(validation_layers.size());
             device_info.ppEnabledLayerNames = validation_layers.data();
         }
@@ -160,15 +178,57 @@ DeviceImpl::~DeviceImpl()
 {
     vkDestroyDevice(device, nullptr);
 
-    if (ENABLE_VALIDATION_LAYERS) {
+    if (desc.enable_validation_layers) {
         vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, nullptr);
     }
 
     vkDestroyInstance(instance, nullptr);
 }
 
-Device::Device() { m_impl = std::make_unique<DeviceImpl>(); }
+Device::Device(const DeviceDesc &desc) { m_impl = std::make_unique<DeviceImpl>(desc); }
 
 Device::~Device() {}
+
+BufferHandle Device::create_buffer(const BufferDesc &desc)
+{
+    BufferHandle handle = m_impl->buffers.alloc();
+    BufferImpl *buffer = m_impl->buffers[handle];
+    return handle;
+}
+
+void Device::destroy_buffer(BufferHandle handle)
+{
+    BufferImpl *buffer = m_impl->buffers[handle];
+    if (!buffer)
+        return;
+}
+
+ImageHandle Device::create_image(const ImageDesc &desc)
+{
+    ImageHandle handle = m_impl->images.alloc();
+    ImageImpl *image = m_impl->images[handle];
+    return handle;
+}
+
+void Device::destroy_image(ImageHandle handle)
+{
+    ImageImpl *image = m_impl->images[handle];
+    if (!image)
+        return;
+}
+
+PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
+{
+    PipelineHandle handle = m_impl->pipelines.alloc();
+    PipelineImpl *pipeline = m_impl->pipelines[handle];
+    return handle;
+}
+
+void Device::destroy_pipeline(PipelineHandle handle)
+{
+    PipelineImpl *pipeline = m_impl->pipelines[handle];
+    if (!pipeline)
+        return;
+}
 
 FR_NAMESPACE_END

@@ -81,9 +81,11 @@ if(FOTORITE_ENABLE_TESTS)
         src/tests.cpp
         src/core/fileio_tests.cpp
         src/core/imageio_tests.cpp
+        src/core/pool_tests.cpp
         src/core/properties_tests.cpp
         src/core/settings_tests.cpp
         src/core/stringutils_tests.cpp
+        src/process/device_tests.cpp
     )
     target_link_libraries(fotorite_tests PRIVATE core doctest::doctest)
 
