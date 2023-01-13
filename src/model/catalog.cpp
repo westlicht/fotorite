@@ -11,7 +11,8 @@ FR_NAMESPACE_BEGIN
 
 static BS::thread_pool s_thread_pool;
 
-inline void load_image(std::filesystem::path path) {
+inline void load_image(std::filesystem::path path)
+{
     auto image = ImageInput::open(path);
     if (!image) {
         spdlog::warn("failed to open {}", path);
@@ -24,17 +25,18 @@ inline void load_image(std::filesystem::path path) {
     image->read_image(pixels.data(), pixels.size());
 }
 
-Catalog::Catalog(const std::filesystem::path &root_path) : _root_path(root_path) { refresh(); }
+Catalog::Catalog(const std::filesystem::path &root_path) : m_root_path(root_path) { refresh(); }
 
 Catalog::~Catalog() {}
 
-CatalogDirPtr CatalogDir::load(const std::filesystem::path &path, CatalogDir *parent) {
+CatalogDirPtr CatalogDir::load(const std::filesystem::path &path, CatalogDir *parent)
+{
     CatalogDirPtr dir = std::make_shared<CatalogDir>(path, parent);
 
     for (const auto &it : std::filesystem::directory_iterator(path)) {
         if (it.is_directory()) {
             // spdlog::info("directory {}", it.path());
-            dir->_dirs.push_back(load(it.path(), dir.get()));
+            dir->m_dirs.push_back(load(it.path(), dir.get()));
         } else if (it.is_regular_file()) {
             if (!it.path().has_extension())
                 continue;
@@ -48,7 +50,7 @@ CatalogDirPtr CatalogDir::load(const std::filesystem::path &path, CatalogDir *pa
 
             // spdlog::info("file {}", it.path().generic_string());
             CatalogFile file(it.path(), dir.get());
-            dir->_files.push_back(file);
+            dir->m_files.push_back(file);
 
             s_thread_pool.push_task(load_image, it.path());
         }
@@ -57,9 +59,10 @@ CatalogDirPtr CatalogDir::load(const std::filesystem::path &path, CatalogDir *pa
     return dir;
 }
 
-void Catalog::refresh() {
+void Catalog::refresh()
+{
     Timer timer;
-    _root_dir = CatalogDir::load(_root_path, nullptr);
+    m_root_dir = CatalogDir::load(m_root_path, nullptr);
     spdlog::info("enumerating catalog files took {}s", timer.elapsed());
 
     s_thread_pool.wait_for_tasks();

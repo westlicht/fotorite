@@ -15,13 +15,13 @@ public:
 private:
     void update_layout();
 
-    Panel *_left_panel;
-    Panel *_right_panel;
-    Panel *_top_panel;
-    Panel *_bottom_panel;
-    Panel *_main_panel;
+    Panel *m_left_panel;
+    Panel *m_right_panel;
+    Panel *m_top_panel;
+    Panel *m_bottom_panel;
+    Panel *m_main_panel;
 
-    CatalogView *_catalog_view;
+    CatalogView *m_catalog_view;
 };
 
 FR_NAMESPACE_END

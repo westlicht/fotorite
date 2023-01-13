@@ -17,11 +17,11 @@ public:
     virtual void perform_layout(NVGcontext *ctx) override;
 
 private:
-    VScrollPanel *_scroll_panel;
-    Panel *_panel;
-    GridLayout *_grid_layout;
+    VScrollPanel *m_scroll_panel;
+    Panel *m_panel;
+    GridLayout *m_grid_layout;
 
-    std::vector<CatalogViewItem *> _items;
+    std::vector<CatalogViewItem *> m_items;
 };
 
 FR_NAMESPACE_END

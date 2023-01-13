@@ -14,7 +14,7 @@ public:
     ~Device();
 
 private:
-    std::unique_ptr<DeviceImpl> _impl;
+    std::unique_ptr<DeviceImpl> m_impl;
 };
 
 FR_NAMESPACE_END

@@ -11,8 +11,10 @@ using namespace fr;
 
 TEST_SUITE_BEGIN("fileio");
 
-TEST_CASE("MemoryMappedFile") {
-    SUBCASE("closed") {
+TEST_CASE("MemoryMappedFile")
+{
+    SUBCASE("closed")
+    {
         MemoryMappedFile file;
         CHECK_EQ(file.is_open(), false);
         CHECK_EQ(file.size(), 0);
@@ -24,7 +26,8 @@ TEST_CASE("MemoryMappedFile") {
         CHECK_EQ(file.is_open(), false);
     }
 
-    SUBCASE("non existing") {
+    SUBCASE("non existing")
+    {
         {
             MemoryMappedFile file;
             CHECK_EQ(file.open("__file_that_does_not_exist__"), false);
@@ -36,7 +39,8 @@ TEST_CASE("MemoryMappedFile") {
         }
     }
 
-    SUBCASE("read") {
+    SUBCASE("read")
+    {
         std::vector<uint8_t> random_data(128 * 1024);
         std::mt19937 rng;
         for (size_t i = 0; i < random_data.size(); ++i)

@@ -29,7 +29,7 @@ public:
     void set(const char *name, const T &value);
 
 private:
-    std::unique_ptr<json> _json;
+    std::unique_ptr<json> m_json;
 };
 
 #define ACCESSOR_DECL(T)                                 \

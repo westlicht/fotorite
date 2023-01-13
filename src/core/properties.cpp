@@ -8,14 +8,16 @@ using json = fr::Properties::json;
 
 namespace nanogui {
 template <typename T, size_t N>
-void to_json(json &j, const Array<T, N> &a) {
+void to_json(json &j, const Array<T, N> &a)
+{
     j = json::array();
     for (size_t i = 0; i < N; ++i) {
         j[i] = a[i];
     }
 }
 template <typename T, size_t N>
-void from_json(const json &j, Array<T, N> &a) {
+void from_json(const json &j, Array<T, N> &a)
+{
     if (j.is_array() && j.size() == N) {
         for (size_t i = 0; i < N; ++i) {
             j[i].get_to(a[i]);
@@ -27,26 +29,28 @@ void from_json(const json &j, Array<T, N> &a) {
 
 FR_NAMESPACE_BEGIN
 
-Properties::Properties() { _json = std::make_unique<json>(); }
-Properties::Properties(const nlohmann::ordered_json &j) { _json = std::make_unique<json>(j); }
+Properties::Properties() { m_json = std::make_unique<json>(); }
+Properties::Properties(const nlohmann::ordered_json &j) { m_json = std::make_unique<json>(j); }
 Properties::~Properties() {}
 
-const Properties::json &Properties::json_value() const { return *_json; }
+const Properties::json &Properties::json_value() const { return *m_json; }
 
-bool Properties::has(const char *name) const { return _json->find(name) != _json->end(); }
+bool Properties::has(const char *name) const { return m_json->find(name) != m_json->end(); }
 
-#define ACCESSOR_IMPL(T)                                               \
-    template <>                                                        \
-    T Properties::get<T>(const char *name, const T &def_value) const { \
-        T result = def_value;                                          \
-        if (auto it = _json->find(name); it != _json->end()) {         \
-            it->get_to(result);                                        \
-        }                                                              \
-        return result;                                                 \
-    }                                                                  \
-    template <>                                                        \
-    void Properties::set<T>(const char *name, const T &value) {        \
-        (*_json)[name] = value;                                        \
+#define ACCESSOR_IMPL(T)                                             \
+    template <>                                                      \
+    T Properties::get<T>(const char *name, const T &def_value) const \
+    {                                                                \
+        T result = def_value;                                        \
+        if (auto it = m_json->find(name); it != m_json->end()) {     \
+            it->get_to(result);                                      \
+        }                                                            \
+        return result;                                               \
+    }                                                                \
+    template <>                                                      \
+    void Properties::set<T>(const char *name, const T &value)        \
+    {                                                                \
+        (*m_json)[name] = value;                                     \
     }
 
 ACCESSOR_IMPL(bool)

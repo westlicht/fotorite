@@ -24,7 +24,7 @@ public:
 private:
     using json = nlohmann::ordered_json;
 
-    std::unique_ptr<json> _json;
+    std::unique_ptr<json> m_json;
 };
 
 FR_NAMESPACE_END

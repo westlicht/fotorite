@@ -13,16 +13,19 @@ struct TestValues {
     static inline const T a{0};
     static inline const T b{1};
 };
+
 template <>
 struct TestValues<nanogui::Vector2i> {
     static inline const nanogui::Vector2i a{1, 2};
     static inline const nanogui::Vector2i b{2, 3};
 };
+
 template <>
 struct TestValues<nanogui::Vector3i> {
     static inline const nanogui::Vector3i a{1, 2, 3};
     static inline const nanogui::Vector3i b{2, 3, 4};
 };
+
 template <>
 struct TestValues<std::string> {
     static inline const std::string a{"foo"};
@@ -30,7 +33,8 @@ struct TestValues<std::string> {
 };
 
 TEST_CASE_TEMPLATE("Properties", T, bool, int, nanogui::Vector2i, nanogui::Vector3i, float, nanogui::Vector2f,
-                   nanogui::Vector3f, std::string) {
+                   nanogui::Vector3f, std::string)
+{
     Properties p;
 
     T a = TestValues<T>::a;

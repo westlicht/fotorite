@@ -52,16 +52,16 @@ public:
     void close();
 
     /// True, if file successfully opened.
-    bool is_open() const { return _mapped_data != nullptr; }
+    bool is_open() const { return m_mapped_data != nullptr; }
 
     /// Get the file size in bytes.
-    size_t size() const { return _size; }
+    size_t size() const { return m_size; }
 
     /// Get the mapped data.
-    const void *data() const { return _mapped_data; };
+    const void *data() const { return m_mapped_data; };
 
     /// Get the mapped memory size in bytes.
-    size_t mapped_size() const { return _mapped_size; };
+    size_t mapped_size() const { return m_mapped_size; };
 
     /// Get the OS page size (for remap).
     static size_t page_size();
@@ -80,22 +80,22 @@ private:
      */
     bool remap(uint64_t offset, size_t mapped_size);
 
-    std::filesystem::path _path;
-    AccessHint _access_hint = AccessHint::Normal;
-    size_t _size = 0;
+    std::filesystem::path m_path;
+    AccessHint m_access_hint = AccessHint::Normal;
+    size_t m_size = 0;
 
 #if FR_WINDOWS
     using FileHandle = void *;
-    void *_mapped_file{nullptr};
+    void *m_mapped_file{nullptr};
 #elif FR_LINUX || FR_MACOS
     using FileHandle = int;
 #else
 #error "Unknown OS"
 #endif
 
-    FileHandle _file = 0;
-    void *_mapped_data = 0;
-    size_t _mapped_size = 0;
+    FileHandle m_file = 0;
+    void *m_mapped_data = 0;
+    size_t m_mapped_size = 0;
 };
 
 FR_NAMESPACE_END

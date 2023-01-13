@@ -167,7 +167,7 @@ DeviceImpl::~DeviceImpl()
     vkDestroyInstance(instance, nullptr);
 }
 
-Device::Device() { _impl = std::make_unique<DeviceImpl>(); }
+Device::Device() { m_impl = std::make_unique<DeviceImpl>(); }
 
 Device::~Device() {}
 
