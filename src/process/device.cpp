@@ -19,6 +19,33 @@
 
 FR_NAMESPACE_BEGIN
 
+static const VkFilter SAMPLER_FILTER_MAP[] = {
+    // SamplerFilter::Nearest
+    VK_FILTER_NEAREST,
+    // SamplerFilter::Linear
+    VK_FILTER_LINEAR,
+};
+
+static const VkSamplerMipmapMode SAMPLER_MIP_MAP_MODE_MAP[] = {
+    // SamplerMipMapMode::Nearest
+    VK_SAMPLER_MIPMAP_MODE_NEAREST,
+    // SamplerMipMapMode::Linear
+    VK_SAMPLER_MIPMAP_MODE_LINEAR,
+};
+
+static const VkSamplerAddressMode SAMPLER_ADDRESS_MODE_MAP[] = {
+    // SamplerAddressMode::Repeat
+    VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    // SamplerAddressMode::MirroredRepeat
+    VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+    // SamplerAddressMode::ClampToEdge
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    // SamplerAddressMode::ClampToBorder
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+    // SamplerAddressMode::MirrorClampToEdge
+    VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+};
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                                                      VkDebugUtilsMessageTypeFlagsEXT type,
                                                      const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
@@ -36,6 +63,11 @@ struct BufferImpl {
 struct ImageImpl {
     ImageDesc desc;
     VkImage image;
+};
+
+struct SamplerImpl {
+    SamplerDesc desc;
+    VkSampler sampler;
 };
 
 struct PipelineImpl {
@@ -56,6 +88,7 @@ struct DeviceImpl {
 
     Pool<BufferImpl, BufferHandle> buffers;
     Pool<ImageImpl, ImageHandle> images;
+    Pool<SamplerImpl, SamplerHandle> samplers;
     Pool<PipelineImpl, PipelineHandle> pipelines;
 };
 
@@ -215,6 +248,34 @@ void Device::destroy_image(ImageHandle handle)
     ImageImpl *image = m_impl->images[handle];
     if (!image)
         return;
+}
+
+SamplerHandle Device::create_sampler(const SamplerDesc &desc)
+{
+    SamplerHandle handle = m_impl->samplers.alloc();
+    SamplerImpl *sampler = m_impl->samplers[handle];
+
+    VkSamplerCreateInfo create_info{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    create_info.magFilter = SAMPLER_FILTER_MAP[static_cast<size_t>(desc.mag_filter)];
+    create_info.minFilter = SAMPLER_FILTER_MAP[static_cast<size_t>(desc.min_filter)];
+    create_info.mipmapMode = SAMPLER_MIP_MAP_MODE_MAP[static_cast<size_t>(desc.mip_map_mode)];
+    create_info.addressModeU = SAMPLER_ADDRESS_MODE_MAP[static_cast<size_t>(desc.address_mode_u)];
+    create_info.addressModeV = SAMPLER_ADDRESS_MODE_MAP[static_cast<size_t>(desc.address_mode_v)];
+    create_info.addressModeW = SAMPLER_ADDRESS_MODE_MAP[static_cast<size_t>(desc.address_mode_w)];
+
+    VK_CHECK(vkCreateSampler(m_impl->device, &create_info, nullptr, &sampler->sampler));
+
+    return handle;
+}
+
+void Device::destroy_sampler(SamplerHandle handle)
+{
+    SamplerImpl *sampler = m_impl->samplers[handle];
+    if (!sampler)
+        return;
+
+    vkDestroySampler(m_impl->device, sampler->sampler, nullptr);
+    m_impl->samplers.free(handle);
 }
 
 PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
