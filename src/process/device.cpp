@@ -96,15 +96,21 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
 {
     VK_CHECK(volkInitialize());
 
-    // enumerate validation layers
-    uint32_t layer_count;
-    VK_CHECK(vkEnumerateInstanceLayerProperties(&layer_count, nullptr));
-    std::vector<VkLayerProperties> available_layers(layer_count);
-    vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
-
     std::vector<const char *> validation_layers;
+
     if (desc.enable_validation_layers) {
-        validation_layers.emplace_back("VK_LAYER_KHRONOS_validation");
+        // enumerate validation layers
+        uint32_t layer_count;
+        VK_CHECK(vkEnumerateInstanceLayerProperties(&layer_count, nullptr));
+        std::vector<VkLayerProperties> layers(layer_count);
+        vkEnumerateInstanceLayerProperties(&layer_count, layers.data());
+
+        spdlog::info("available vulkan layers:");
+        for (const auto &layer : layers) {
+            spdlog::info("{}", layer.layerName);
+            if (std::strcmp(layer.layerName, "VK_LAYER_KHRONOS_validation") == 0)
+                validation_layers.emplace_back("VK_LAYER_KHRONOS_validation");
+        }
     }
 
     // enumerate instance extensions
@@ -118,7 +124,7 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
     app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     app_info.pEngineName = "no engine";
     app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.apiVersion = VK_API_VERSION_1_0;
+    app_info.apiVersion = VK_API_VERSION_1_2;
 
     std::vector<const char *> required_extensions;
     // required_extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
