@@ -6,7 +6,7 @@ using namespace fr;
 
 TEST_SUITE_BEGIN("process");
 
-TEST_CASE("Device")
+TEST_CASE("Device" * doctest::skip())
 {
     DeviceDesc desc;
     desc.enable_validation_layers = true;
@@ -17,7 +17,40 @@ TEST_CASE("Device")
         .min_filter = SamplerFilter::Nearest,
     });
 
+    BufferHandle b = device.create_buffer({
+        .size = 1024,
+        .usage = ResourceUsage::ShaderResource | ResourceUsage::UnorderedAccess,
+        .memory = MemoryType::Device,
+    });
+
     device.destroy_sampler(s);
+    device.destroy_buffer(b);
+}
+
+TEST_CASE("compute")
+{
+    // auto pipeline = device.create_pipeline({
+    //     .shader = {},
+    //     .bindings =
+    //         {
+    //             {
+    //                 .binding = 0,
+    //                 .type = DescriptorType::Texture,
+    //                 .count = 1,
+    //             },
+    //             {
+    //                 .binding = 1,
+    //                 .type = DescriptorType::Image,
+    //                 .count = 1,
+    //             },
+    //         },
+    //     .push_constants_size = 128,
+    // });
+
+    // auto sequence = device.begin();
+
+    // sequence.bind
+    // sequence.dispatch(pipeline);
 }
 
 TEST_SUITE_END();

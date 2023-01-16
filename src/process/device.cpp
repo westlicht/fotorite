@@ -19,6 +19,114 @@
 
 FR_NAMESPACE_BEGIN
 
+static const VkFormat IMAGE_FORMAT_MAP[] = {
+    // ImageFormat::Unknown
+    VK_FORMAT_UNDEFINED,
+
+    // ImageFormat::R8Unorm
+    VK_FORMAT_R8_UNORM,
+    // ImageFormat::R8Snorm
+    VK_FORMAT_R8_SNORM,
+    // ImageFormat::R8UInt
+    VK_FORMAT_R8_UINT,
+    // ImageFormat::R8Int
+    VK_FORMAT_R8_SINT,
+    // ImageFormat::R16Uint
+    VK_FORMAT_R16_UINT,
+    // ImageFormat::R16Int
+    VK_FORMAT_R16_SINT,
+    // ImageFormat::R16Float
+    VK_FORMAT_R16_SFLOAT,
+    // ImageFormat::R32Uint
+    VK_FORMAT_R32_UINT,
+    // ImageFormat::R32Int
+    VK_FORMAT_R32_SINT,
+    // ImageFormat::R32Float
+    VK_FORMAT_R32_SFLOAT,
+
+    // ImageFormat::RG16Uint
+    VK_FORMAT_R16G16_UINT,
+    // ImageFormat::RG16Int
+    VK_FORMAT_R16G16_SINT,
+    // ImageFormat::RG16Float
+    VK_FORMAT_R16G16_SFLOAT,
+    // ImageFormat::RG32Uint
+    VK_FORMAT_R32G32_UINT,
+    // ImageFormat::RG32Int
+    VK_FORMAT_R32G32_SINT,
+    // ImageFormat::RG32Float
+    VK_FORMAT_R32G32_SFLOAT,
+
+    // ImageFormat::RGB16Uint
+    VK_FORMAT_R16G16B16_UINT,
+    // ImageFormat::RGB16Int
+    VK_FORMAT_R16G16B16_SINT,
+    // ImageFormat::RGB16Float
+    VK_FORMAT_R16G16B16_SFLOAT,
+    // ImageFormat::RGB32Uint
+    VK_FORMAT_R32G32B32_UINT,
+    // ImageFormat::RGB32Int
+    VK_FORMAT_R32G32B32_SINT,
+    // ImageFormat::RGB32Float
+    VK_FORMAT_R32G32B32_SFLOAT,
+
+    // ImageFormat::RGBA8Unorm
+    VK_FORMAT_R8G8B8A8_UNORM,
+    // ImageFormat::RGBA16Uint
+    VK_FORMAT_R16G16B16A16_UINT,
+    // ImageFormat::RGBA16Int
+    VK_FORMAT_R16G16B16A16_SINT,
+    // ImageFormat::RGBA16Float
+    VK_FORMAT_R16G16B16A16_SFLOAT,
+    // ImageFormat::RGBA32Uint
+    VK_FORMAT_R32G32B32A32_UINT,
+    // ImageFormat::RGBA32Int
+    VK_FORMAT_R32G32B32A32_SINT,
+    // ImageFormat::RGBA32Float
+    VK_FORMAT_R32G32B32A32_SFLOAT,
+};
+
+const VkMemoryPropertyFlags MEMORY_TYPE_MAP[] = {
+    // MemoryType::Host
+    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    // MemoryType::Device
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    // MemoryType::DeviceOnly
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+};
+
+struct ResourceUsageInfo {
+    VkBufferUsageFlags buffer_usage;
+    VkImageUsageFlags image_usage;
+};
+
+const ResourceUsageInfo RESOURCE_USAGE_MAP[] = {
+    // Unknown
+    {0, 0},
+    // ConstantBuffer
+    {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 0},
+    // UnorderedAccess
+    {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, VK_IMAGE_USAGE_STORAGE_BIT},
+    // ShaderResource
+    {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT, VK_IMAGE_USAGE_SAMPLED_BIT},
+    // TransferDst
+    {VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_IMAGE_USAGE_TRANSFER_DST_BIT},
+    // TransferSrc
+    {VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT},
+};
+
+inline ResourceUsageInfo get_resource_usage_info(ResourceUsage usage)
+{
+    ResourceUsageInfo info{};
+    for (size_t i = 0; i < std::size(RESOURCE_USAGE_MAP); ++i) {
+        if (uint32_t(usage) & (1 << i)) {
+            info.buffer_usage |= RESOURCE_USAGE_MAP[i].buffer_usage;
+            info.image_usage |= RESOURCE_USAGE_MAP[i].image_usage;
+        }
+    }
+    return info;
+}
+
 static const VkFilter SAMPLER_FILTER_MAP[] = {
     // SamplerFilter::Nearest
     VK_FILTER_NEAREST,
@@ -57,6 +165,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverity
 
 struct BufferImpl {
     BufferDesc desc;
+    VkDeviceMemory memory;
     VkBuffer buffer;
 };
 
@@ -79,11 +188,25 @@ struct DeviceImpl {
     DeviceImpl(const DeviceDesc &desc);
     ~DeviceImpl();
 
+    uint32_t find_memory_type(uint32_t type_filter, MemoryType memory_type) const
+    {
+        uint32_t properties = MEMORY_TYPE_MAP[static_cast<uint32_t>(memory_type)];
+        for (uint32_t i = 0; i < memory_properties.memoryTypeCount; i++) {
+            if ((type_filter & (1 << i)) &&
+                (memory_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+                return i;
+            }
+        }
+        throw std::runtime_error("Failed to find suitable memory type!");
+    }
+
     DeviceDesc desc;
     VkInstance instance{VK_NULL_HANDLE};
     VkDebugUtilsMessengerEXT debug_messenger{VK_NULL_HANDLE};
     VkPhysicalDevice physical_device{VK_NULL_HANDLE};
+    VkPhysicalDeviceMemoryProperties memory_properties;
     VkDevice device{VK_NULL_HANDLE};
+    uint32_t graphics_queue_family;
     VkQueue queue;
 
     Pool<BufferImpl, BufferHandle> buffers;
@@ -172,8 +295,11 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
             throw std::runtime_error("No suitable Vulkan device available!");
     }
 
+    // check memory types
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+
     // check queues
-    std::optional<uint32_t> graphics_queue_family;
+    graphics_queue_family = static_cast<uint32_t>(-1);
     {
         uint32_t queue_family_count = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, nullptr);
@@ -185,14 +311,14 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
                 graphics_queue_family = i;
         }
 
-        if (!graphics_queue_family.has_value())
+        if (graphics_queue_family == static_cast<uint32_t>(-1))
             throw std::runtime_error("No graphics queue!");
     }
 
     // create device
     {
         VkDeviceQueueCreateInfo queue_info{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-        queue_info.queueFamilyIndex = graphics_queue_family.value();
+        queue_info.queueFamilyIndex = graphics_queue_family;
         queue_info.queueCount = 1;
         float queue_priority = 1.0f;
         queue_info.pQueuePriorities = &queue_priority;
@@ -209,7 +335,7 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
         }
 
         VK_CHECK(vkCreateDevice(physical_device, &device_info, nullptr, &device));
-        vkGetDeviceQueue(device, graphics_queue_family.value(), 0, &queue);
+        vkGetDeviceQueue(device, graphics_queue_family, 0, &queue);
     }
 }
 
@@ -232,6 +358,32 @@ BufferHandle Device::create_buffer(const BufferDesc &desc)
 {
     BufferHandle handle = m_impl->buffers.alloc();
     BufferImpl *buffer = m_impl->buffers[handle];
+
+    buffer->desc = desc;
+
+    ResourceUsageInfo usage_info = get_resource_usage_info(desc.usage);
+
+    VkBufferCreateInfo create_info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    create_info.size = desc.size;
+    create_info.usage = usage_info.buffer_usage;
+    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.queueFamilyIndexCount = 1;
+    create_info.pQueueFamilyIndices = &m_impl->graphics_queue_family;
+    VK_CHECK(vkCreateBuffer(m_impl->device, &create_info, nullptr, &buffer->buffer));
+
+    VkMemoryRequirements memory_requirements;
+    vkGetBufferMemoryRequirements(m_impl->device, buffer->buffer, &memory_requirements);
+
+    // VkMemoryAllocateFlagsInfo flags_info{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};
+    // flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+
+    VkMemoryAllocateInfo allocate_info{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    // allocate_info.pNext = &flags_info;
+    allocate_info.allocationSize = memory_requirements.size;
+    allocate_info.memoryTypeIndex = m_impl->find_memory_type(memory_requirements.memoryTypeBits, desc.memory);
+    VK_CHECK(vkAllocateMemory(m_impl->device, &allocate_info, nullptr, &buffer->memory));
+    VK_CHECK(vkBindBufferMemory(m_impl->device, buffer->buffer, buffer->memory, 0));
+
     return handle;
 }
 
@@ -240,6 +392,10 @@ void Device::destroy_buffer(BufferHandle handle)
     BufferImpl *buffer = m_impl->buffers[handle];
     if (!buffer)
         return;
+
+    vkDestroyBuffer(m_impl->device, buffer->buffer, nullptr);
+    vkFreeMemory(m_impl->device, buffer->memory, nullptr);
+    m_impl->buffers.free(handle);
 }
 
 ImageHandle Device::create_image(const ImageDesc &desc)
@@ -262,12 +418,12 @@ SamplerHandle Device::create_sampler(const SamplerDesc &desc)
     SamplerImpl *sampler = m_impl->samplers[handle];
 
     VkSamplerCreateInfo create_info{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-    create_info.magFilter = SAMPLER_FILTER_MAP[static_cast<size_t>(desc.mag_filter)];
-    create_info.minFilter = SAMPLER_FILTER_MAP[static_cast<size_t>(desc.min_filter)];
-    create_info.mipmapMode = SAMPLER_MIP_MAP_MODE_MAP[static_cast<size_t>(desc.mip_map_mode)];
-    create_info.addressModeU = SAMPLER_ADDRESS_MODE_MAP[static_cast<size_t>(desc.address_mode_u)];
-    create_info.addressModeV = SAMPLER_ADDRESS_MODE_MAP[static_cast<size_t>(desc.address_mode_v)];
-    create_info.addressModeW = SAMPLER_ADDRESS_MODE_MAP[static_cast<size_t>(desc.address_mode_w)];
+    create_info.magFilter = SAMPLER_FILTER_MAP[static_cast<uint32_t>(desc.mag_filter)];
+    create_info.minFilter = SAMPLER_FILTER_MAP[static_cast<uint32_t>(desc.min_filter)];
+    create_info.mipmapMode = SAMPLER_MIP_MAP_MODE_MAP[static_cast<uint32_t>(desc.mip_map_mode)];
+    create_info.addressModeU = SAMPLER_ADDRESS_MODE_MAP[static_cast<uint32_t>(desc.address_mode_u)];
+    create_info.addressModeV = SAMPLER_ADDRESS_MODE_MAP[static_cast<uint32_t>(desc.address_mode_v)];
+    create_info.addressModeW = SAMPLER_ADDRESS_MODE_MAP[static_cast<uint32_t>(desc.address_mode_w)];
 
     VK_CHECK(vkCreateSampler(m_impl->device, &create_info, nullptr, &sampler->sampler));
 
