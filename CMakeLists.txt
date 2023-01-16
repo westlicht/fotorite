@@ -5,6 +5,7 @@ project(fotorite)
 # -----------------------------------------------------------------------------
 # configuration
 # -----------------------------------------------------------------------------
+
 option(FOTORITE_ENABLE_TESTS "Enable tests" ON)
 option(FOTORITE_GITHUB_CI "GitHub CI" OFF)
 
@@ -35,9 +36,54 @@ set(NANOGUI_BUILD_PYTHON OFF)
 set(NANOGUI_INSTALL OFF)
 add_subdirectory(ext/nanogui)
 
+# dxc
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+    set(DXC_URL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.7.2212/dxc_2022_12_16.zip)
+    set(DXC_REL_PATH bin/x64/dxc.exe)
+elseif(CMAKE_HOST_SYSTEM STREQUAL "Linux")
+    set(DXC_URL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.7.2212/linux_dxc_2022_12_16.tar.gz)
+    set(DXC_REL_PATH bin/x64/dxc)
+elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+endif()
+
+include(FetchContent)
+FetchContent_Declare(dxc URL ${DXC_URL})
+FetchContent_MakeAvailable(dxc)
+
+set(DXC ${dxc_SOURCE_DIR}/${DXC_REL_PATH})
+
+# -----------------------------------------------------------------------------
+# shaders
+# -----------------------------------------------------------------------------
+
+set(SHADER_SRC_DIR ${PROJECT_SOURCE_DIR}/src/shaders)
+set(SHADER_BIN_DIR ${PROJECT_BINARY_DIR}/shaders)
+
+set(shaders
+    test.cs.hlsl
+)
+
+foreach(shader ${shaders})
+    get_filename_component(name ${shader} NAME_WLE)
+    string(MAKE_C_IDENTIFIER ${name} cid)
+    set(source_file ${SHADER_SRC_DIR}/${shader})
+    set(spirv_file ${SHADER_BIN_DIR}/${name}.spv)
+    set(header_file ${SHADER_BIN_DIR}/${cid}.h)
+    add_custom_command(
+        OUTPUT ${spirv_file}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/shaders/"
+        COMMAND ${DXC} -I ${SHADER_SRC_DIR} -T cs_6_0 -spirv -Fo ${spirv_file} -Vn ${cid} -Fh ${header_file} ${source_file}
+        DEPENDS ${source_file}
+    )
+    list(APPEND spirv_files ${spirv_file})
+endforeach()
+
+add_custom_target(shaders DEPENDS ${spirv_files})
+
 # -----------------------------------------------------------------------------
 # core library
 # -----------------------------------------------------------------------------
+
 add_library(core STATIC)
 target_sources(core PRIVATE
     src/core/core.cpp
@@ -53,7 +99,7 @@ target_sources(core PRIVATE
     src/ui/main_screen.cpp
     src/ui/panel.cpp
 )
-target_include_directories(core PUBLIC src PRIVATE ${JPEG_INCLUDE_DIR})
+target_include_directories(core PUBLIC src PRIVATE ${JPEG_INCLUDE_DIR} ${SHADER_BIN_DIR})
 target_compile_features(core PUBLIC cxx_std_20)
 target_compile_definitions(core PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE)
 target_compile_options(core PUBLIC
@@ -66,15 +112,19 @@ target_compile_options(core PUBLIC
 )
 target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog nlohmann_json::nlohmann_json nanogui PRIVATE ${JPEG_LIBRARIES} PNG::PNG TinyEXIFstatic BS_thread_pool Vulkan::Headers volk::volk)
 
+add_dependencies(core shaders)
+
 # -----------------------------------------------------------------------------
 # application
 # -----------------------------------------------------------------------------
+
 add_executable(fotorite src/main.cpp)
 target_link_libraries(fotorite PRIVATE core)
 
 # -----------------------------------------------------------------------------
 # tests
 # -----------------------------------------------------------------------------
+
 if(FOTORITE_ENABLE_TESTS)
     enable_testing()
 
