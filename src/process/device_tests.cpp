@@ -6,7 +6,7 @@ using namespace fr;
 
 TEST_SUITE_BEGIN("process");
 
-TEST_CASE("Device" * doctest::skip())
+TEST_CASE("Device" * doctest::skip(FOTORITE_GITHUB_CI))
 {
     DeviceDesc desc;
     desc.enable_validation_layers = true;

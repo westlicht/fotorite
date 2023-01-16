@@ -6,6 +6,7 @@ project(fotorite)
 # configuration
 # -----------------------------------------------------------------------------
 option(FOTORITE_ENABLE_TESTS "Enable tests" ON)
+option(FOTORITE_GITHUB_CI "GitHub CI" OFF)
 
 # -----------------------------------------------------------------------------
 # dependencies
@@ -88,6 +89,7 @@ if(FOTORITE_ENABLE_TESTS)
         src/process/device_tests.cpp
     )
     target_link_libraries(fotorite_tests PRIVATE core doctest::doctest)
+    target_compile_definitions(fotorite_tests PRIVATE FOTORITE_GITHUB_CI=$<BOOL:${FOTORITE_GITHUB_CI}>)
 
     add_test(NAME fotorite_tests COMMAND fotorite_tests)
 endif()
