@@ -24,6 +24,26 @@
 
 #define FR_ASSERT(c)
 
+#define FR_ENUM_FLAG_OPERATORS(T)                                                                                \
+    static_assert(sizeof(T) == sizeof(uint32_t));                                                                \
+    inline T operator~(T a) { return static_cast<T>(~static_cast<uint32_t>(a)); }                                \
+    inline T operator|(T a, T b) { return static_cast<T>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b)); } \
+    inline T operator&(T a, T b) { return static_cast<T>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b)); } \
+    inline T operator^(T a, T b) { return static_cast<T>(static_cast<uint32_t>(a) ^ static_cast<uint32_t>(b)); } \
+    inline T &operator|=(T &a, T b)                                                                              \
+    {                                                                                                            \
+        return reinterpret_cast<T &>(reinterpret_cast<uint32_t &>(a) |= static_cast<uint32_t>(b));               \
+    }                                                                                                            \
+    inline T &operator&=(T &a, T b)                                                                              \
+    {                                                                                                            \
+        return reinterpret_cast<T &>(reinterpret_cast<uint32_t &>(a) &= static_cast<uint32_t>(b));               \
+    }                                                                                                            \
+    inline T &operator^=(T &a, T b)                                                                              \
+    {                                                                                                            \
+        return reinterpret_cast<T &>(reinterpret_cast<uint32_t &>(a) ^= static_cast<uint32_t>(b));               \
+    }                                                                                                            \
+    inline bool is_set(T a, T flags) { return (static_cast<uint32_t>(a) & static_cast<uint32_t>(flags)) != 0; }
+
 FR_NAMESPACE_BEGIN
 
 //! Ignore unused parameters.
