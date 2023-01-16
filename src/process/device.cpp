@@ -127,6 +127,30 @@ inline ResourceUsageInfo get_resource_usage_info(ResourceUsage usage)
     return info;
 }
 
+struct DescriptorTypeInfo {
+    VkDescriptorType type;
+    VkImageLayout layout;
+};
+
+const DescriptorTypeInfo DESCRIPTOR_TYPE_MAP[] = {
+    // DescriptorType::Sampler
+    {VK_DESCRIPTOR_TYPE_SAMPLER, VK_IMAGE_LAYOUT_UNDEFINED},
+    // DescriptorType::ConstantBuffer
+    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_IMAGE_LAYOUT_UNDEFINED},
+    // DescriptorType::StructuredBuffer, ByteAddressBuffer
+    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_IMAGE_LAYOUT_UNDEFINED},
+    // DescriptorType::RWStructuredBuffer, RWByteAddressBuffer
+    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_IMAGE_LAYOUT_UNDEFINED},
+    // DescriptorType::Buffer
+    {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, VK_IMAGE_LAYOUT_UNDEFINED},
+    // DescriptorType::RWBuffer
+    {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, VK_IMAGE_LAYOUT_UNDEFINED},
+    // DescriptorType::Texture
+    {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+    // DescriptorType::RWTexture
+    {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_IMAGE_LAYOUT_GENERAL},
+};
+
 static const VkFilter SAMPLER_FILTER_MAP[] = {
     // SamplerFilter::Nearest
     VK_FILTER_NEAREST,
@@ -163,6 +187,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverity
     return VK_FALSE;
 }
 
+struct ShaderImpl {
+    ShaderDesc desc;
+    VkShaderModule shader_module;
+};
+
 struct BufferImpl {
     BufferDesc desc;
     VkDeviceMemory memory;
@@ -181,6 +210,8 @@ struct SamplerImpl {
 
 struct PipelineImpl {
     PipelineDesc desc;
+    VkDescriptorSetLayout descriptor_set_layout;
+    VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
 };
 
@@ -209,6 +240,7 @@ struct DeviceImpl {
     uint32_t graphics_queue_family;
     VkQueue queue;
 
+    Pool<ShaderImpl, ShaderHandle> shaders;
     Pool<BufferImpl, BufferHandle> buffers;
     Pool<ImageImpl, ImageHandle> images;
     Pool<SamplerImpl, SamplerHandle> samplers;
@@ -354,6 +386,32 @@ Device::Device(const DeviceDesc &desc) { m_impl = std::make_unique<DeviceImpl>(d
 
 Device::~Device() {}
 
+ShaderHandle Device::create_shader(const ShaderDesc &desc)
+{
+    ShaderHandle handle = m_impl->shaders.alloc();
+    ShaderImpl *shader = m_impl->shaders[handle];
+
+    shader->desc = desc;
+
+    VkShaderModuleCreateInfo create_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    create_info.pCode = static_cast<const uint32_t *>(desc.code);
+    create_info.codeSize = desc.code_size;
+
+    VK_CHECK(vkCreateShaderModule(m_impl->device, &create_info, nullptr, &shader->shader_module));
+
+    return handle;
+}
+
+void Device::destroy_shader(ShaderHandle handle)
+{
+    ShaderImpl *shader = m_impl->shaders[handle];
+    if (!shader)
+        return;
+
+    vkDestroyShaderModule(m_impl->device, shader->shader_module, nullptr);
+    m_impl->shaders.free(handle);
+}
+
 BufferHandle Device::create_buffer(const BufferDesc &desc)
 {
     BufferHandle handle = m_impl->buffers.alloc();
@@ -444,6 +502,59 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
 {
     PipelineHandle handle = m_impl->pipelines.alloc();
     PipelineImpl *pipeline = m_impl->pipelines[handle];
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings;
+    for (const auto &b : desc.bindings) {
+        if (b.count == 0)
+            continue;
+        VkDescriptorSetLayoutBinding binding = {};
+        binding.binding = b.binding;
+        binding.descriptorType = DESCRIPTOR_TYPE_MAP[static_cast<size_t>(b.type)].type;
+        binding.descriptorCount = b.count;
+        binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        bindings.push_back(binding);
+    }
+
+    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info{};
+    descriptor_set_layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptor_set_layout_create_info.bindingCount = static_cast<uint32_t>(bindings.size());
+    descriptor_set_layout_create_info.pBindings = bindings.data();
+
+    VK_CHECK(vkCreateDescriptorSetLayout(m_impl->device, &descriptor_set_layout_create_info, nullptr,
+                                         &pipeline->descriptor_set_layout));
+
+    VkPushConstantRange push_constant_range{};
+    push_constant_range.offset = 0;
+    push_constant_range.size = desc.push_constants_size;
+    push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkPipelineLayoutCreateInfo pipeline_layout_create_info{};
+    pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipeline_layout_create_info.setLayoutCount = 1;
+    pipeline_layout_create_info.pSetLayouts = &pipeline->descriptor_set_layout;
+    pipeline_layout_create_info.pushConstantRangeCount = desc.push_constants_size > 0 ? 1 : 0;
+    pipeline_layout_create_info.pPushConstantRanges = desc.push_constants_size > 0 ? &push_constant_range : nullptr;
+
+    VK_CHECK(vkCreatePipelineLayout(m_impl->device, &pipeline_layout_create_info, nullptr, &pipeline->pipeline_layout));
+
+    ShaderImpl *shader = m_impl->shaders[desc.shader];
+    FR_ASSERT(shader);
+    FR_ASSERT(shader->desc.entry_point_name);
+
+    VkPipelineShaderStageCreateInfo stage_create_info{};
+    stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stage_create_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    stage_create_info.module = shader->shader_module;
+    stage_create_info.pName = shader->desc.entry_point_name;
+
+    VkComputePipelineCreateInfo pipeline_create_info{};
+    pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    pipeline_create_info.stage = stage_create_info;
+    pipeline_create_info.layout = pipeline->pipeline_layout;
+
+    VK_CHECK(vkCreateComputePipelines(m_impl->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
+                                      &pipeline->pipeline));
+
     return handle;
 }
 
@@ -452,6 +563,10 @@ void Device::destroy_pipeline(PipelineHandle handle)
     PipelineImpl *pipeline = m_impl->pipelines[handle];
     if (!pipeline)
         return;
+
+    vkDestroyPipeline(m_impl->device, pipeline->pipeline, nullptr);
+    vkDestroyPipelineLayout(m_impl->device, pipeline->pipeline_layout, nullptr);
+    vkDestroyDescriptorSetLayout(m_impl->device, pipeline->descriptor_set_layout, nullptr);
 }
 
 FR_NAMESPACE_END

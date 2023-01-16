@@ -93,9 +93,10 @@ target_sources(core PRIVATE
     src/core/properties.cpp
     src/core/settings.cpp
     src/core/stringutils.cpp
-    src/model/document.cpp
     src/model/catalog.cpp
+    src/model/document.cpp
     src/process/device.cpp
+    src/shaders/shaders.cpp
     src/ui/catalog_view.cpp
     src/ui/main_screen.cpp
     src/ui/panel.cpp

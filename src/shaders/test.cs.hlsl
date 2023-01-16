@@ -1,4 +1,3 @@
-
 [[vk::binding(0)]] Buffer<float> buffer0;
 [[vk::binding(1)]] Buffer<float> buffer1;
 [[vk::binding(2)]] RWBuffer<float> result;

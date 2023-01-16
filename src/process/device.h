@@ -4,6 +4,7 @@
 #include "core/pool.h"
 
 #include <memory>
+#include <variant>
 
 FR_NAMESPACE_BEGIN
 
@@ -60,6 +61,19 @@ enum class MemoryType : uint32_t {
     DeviceOnly,
 };
 
+enum class DescriptorType : uint32_t {
+    Sampler,
+    ConstantBuffer,
+    StructuredBuffer,
+    RWStructuredBuffer,
+    ByteAddressBuffer = StructuredBuffer,
+    RWByteAddressBuffer = RWStructuredBuffer,
+    Buffer,
+    RWBuffer,
+    Texture,
+    RWTexture,
+};
+
 enum class SamplerFilter : uint32_t {
     Nearest,
     Linear,
@@ -80,6 +94,7 @@ enum class SamplerAddressMode : uint32_t {
 
 struct DeviceImpl;
 
+using ShaderHandle = Handle<struct ShaderTag>;
 using BufferHandle = Handle<struct BufferTag>;
 using ImageHandle = Handle<struct ImageTag>;
 using SamplerHandle = Handle<struct SamplerTag>;
@@ -87,6 +102,12 @@ using PipelineHandle = Handle<struct PipelineTag>;
 
 struct DeviceDesc {
     bool enable_validation_layers{false};
+};
+
+struct ShaderDesc {
+    const void *code{nullptr};
+    size_t code_size{0};
+    const char *entry_point_name{"main"};
 };
 
 struct BufferDesc {
@@ -113,16 +134,32 @@ struct SamplerDesc {
 };
 
 struct PipelineDesc {
-    void *shader = nullptr;
+    ShaderHandle shader{ShaderHandle::null()};
     struct {
+        uint32_t binding{0};
+        DescriptorType type{DescriptorType::Sampler};
+        uint32_t count{0};
     } bindings[4];
-    size_t push_constants_size = 0;
+    uint32_t push_constants_size = 0;
+};
+
+struct DispatchDesc {
+    PipelineHandle pipeline;
+    struct {
+        uint32_t binding{0};
+        std::variant<BufferHandle, ImageHandle, SamplerHandle> resource;
+    } bindings[4];
+    const void *push_constants;
+    uint32_t push_constants_size;
 };
 
 class Device {
 public:
     Device(const DeviceDesc &desc = {});
     ~Device();
+
+    ShaderHandle create_shader(const ShaderDesc &desc);
+    void destroy_shader(ShaderHandle handle);
 
     BufferHandle create_buffer(const BufferDesc &desc);
     void destroy_buffer(BufferHandle handle);
@@ -135,6 +172,9 @@ public:
 
     PipelineHandle create_pipeline(const PipelineDesc &desc);
     void destroy_pipeline(PipelineHandle handle);
+
+    // void bind_pipeline(PipelineHandle pipeline);
+    // void set_push_constants();
 
 private:
     std::unique_ptr<DeviceImpl> m_impl;
