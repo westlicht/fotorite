@@ -62,6 +62,7 @@ enum class MemoryType : uint32_t {
 };
 
 enum class DescriptorType : uint32_t {
+    Unknown,
     Sampler,
     ConstantBuffer,
     StructuredBuffer,
@@ -99,6 +100,7 @@ using BufferHandle = Handle<struct BufferTag>;
 using ImageHandle = Handle<struct ImageTag>;
 using SamplerHandle = Handle<struct SamplerTag>;
 using PipelineHandle = Handle<struct PipelineTag>;
+using SequenceHandle = Handle<struct SequenceTag>;
 
 struct DeviceDesc {
     bool enable_validation_layers{false};
@@ -134,11 +136,13 @@ struct SamplerDesc {
 };
 
 struct PipelineDesc {
+    static const uint32_t INVALID_BINDING = static_cast<uint32_t>(-1);
+
     ShaderHandle shader{ShaderHandle::null()};
     struct {
-        uint32_t binding{0};
-        DescriptorType type{DescriptorType::Sampler};
-        uint32_t count{0};
+        uint32_t binding{INVALID_BINDING};
+        DescriptorType type{DescriptorType::Unknown};
+        uint32_t count{1};
     } bindings[4];
     uint32_t push_constants_size = 0;
 };
@@ -175,6 +179,21 @@ public:
 
     // void bind_pipeline(PipelineHandle pipeline);
     // void set_push_constants();
+
+    SequenceHandle start_sequence();
+    void end_sequence(SequenceHandle sequence_handle);
+    void wait_sequence(SequenceHandle sequence_handle);
+
+    void write_buffer(SequenceHandle sequence_handle, BufferHandle buffer_handle, const void *data, size_t size,
+                      size_t offset = 0);
+    void read_buffer(SequenceHandle sequence_handle, BufferHandle buffer_handle, void *data, size_t size,
+                     size_t offset = 0);
+
+    void copy_buffer(SequenceHandle sequence_handle);
+    void copy_image(SequenceHandle sequence_handle);
+    void dispatch(DispatchDesc desc);
+
+    void flush();
 
 private:
     std::unique_ptr<DeviceImpl> m_impl;

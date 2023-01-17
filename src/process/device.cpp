@@ -133,6 +133,8 @@ struct DescriptorTypeInfo {
 };
 
 const DescriptorTypeInfo DESCRIPTOR_TYPE_MAP[] = {
+    // DescriptorType::Unknown
+    {VkDescriptorType(0), VkImageLayout(0)},
     // DescriptorType::Sampler
     {VK_DESCRIPTOR_TYPE_SAMPLER, VK_IMAGE_LAYOUT_UNDEFINED},
     // DescriptorType::ConstantBuffer
@@ -189,30 +191,44 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverity
 
 struct ShaderImpl {
     ShaderDesc desc;
-    VkShaderModule shader_module;
+    VkShaderModule vk_shader_module;
 };
 
 struct BufferImpl {
     BufferDesc desc;
-    VkDeviceMemory memory;
-    VkBuffer buffer;
+    VkDeviceMemory vk_device_memory;
+    VkBuffer vk_buffer;
 };
 
 struct ImageImpl {
     ImageDesc desc;
-    VkImage image;
+    VkImage vk_image;
 };
 
 struct SamplerImpl {
     SamplerDesc desc;
-    VkSampler sampler;
+    VkSampler vk_sampler;
 };
 
 struct PipelineImpl {
     PipelineDesc desc;
-    VkDescriptorSetLayout descriptor_set_layout;
-    VkPipelineLayout pipeline_layout;
-    VkPipeline pipeline;
+    VkDescriptorSetLayout vk_descriptor_set_layout;
+    VkPipelineLayout vk_pipeline_layout;
+    VkPipeline vk_pipeline;
+};
+
+struct SequenceImpl {
+    VkCommandBuffer vk_command_buffer;
+    VkSemaphore vk_semaphore;
+};
+
+struct TransientHeap {
+    // VkDescriptorPool vk_descriptor_pool;
+    // VkCommandPool vk_command_pool;
+
+    void init() {}
+
+    void destroy() {}
 };
 
 struct DeviceImpl {
@@ -222,9 +238,9 @@ struct DeviceImpl {
     uint32_t find_memory_type(uint32_t type_filter, MemoryType memory_type) const
     {
         uint32_t properties = MEMORY_TYPE_MAP[static_cast<uint32_t>(memory_type)];
-        for (uint32_t i = 0; i < memory_properties.memoryTypeCount; i++) {
+        for (uint32_t i = 0; i < vk_memory_properties.memoryTypeCount; i++) {
             if ((type_filter & (1 << i)) &&
-                (memory_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+                (vk_memory_properties.memoryTypes[i].propertyFlags & properties) == properties) {
                 return i;
             }
         }
@@ -232,19 +248,22 @@ struct DeviceImpl {
     }
 
     DeviceDesc desc;
-    VkInstance instance{VK_NULL_HANDLE};
-    VkDebugUtilsMessengerEXT debug_messenger{VK_NULL_HANDLE};
-    VkPhysicalDevice physical_device{VK_NULL_HANDLE};
-    VkPhysicalDeviceMemoryProperties memory_properties;
-    VkDevice device{VK_NULL_HANDLE};
+    VkInstance vk_instance{VK_NULL_HANDLE};
+    VkDebugUtilsMessengerEXT vk_debug_messenger{VK_NULL_HANDLE};
+    VkPhysicalDevice vk_physical_device{VK_NULL_HANDLE};
+    VkPhysicalDeviceMemoryProperties vk_memory_properties;
+    VkDevice vk_device{VK_NULL_HANDLE};
     uint32_t graphics_queue_family;
-    VkQueue queue;
+    VkQueue vk_queue;
+
+    TransientHeap transient_heaps[4];
 
     Pool<ShaderImpl, ShaderHandle> shaders;
     Pool<BufferImpl, BufferHandle> buffers;
     Pool<ImageImpl, ImageHandle> images;
     Pool<SamplerImpl, SamplerHandle> samplers;
     Pool<PipelineImpl, PipelineHandle> pipelines;
+    Pool<SequenceImpl, SequenceHandle> sequences;
 };
 
 DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
@@ -307,36 +326,36 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
         instance_info.pNext = (VkDebugUtilsMessengerCreateInfoEXT *)&debug_info;
     }
 
-    VK_CHECK(vkCreateInstance(&instance_info, nullptr, &instance));
-    volkLoadInstance(instance);
+    VK_CHECK(vkCreateInstance(&instance_info, nullptr, &vk_instance));
+    volkLoadInstance(vk_instance);
 
     if (desc.enable_validation_layers) {
-        VK_CHECK(vkCreateDebugUtilsMessengerEXT(instance, &debug_info, nullptr, &debug_messenger));
+        VK_CHECK(vkCreateDebugUtilsMessengerEXT(vk_instance, &debug_info, nullptr, &vk_debug_messenger));
     }
 
     // find physical device
     {
         uint32_t device_count = 0;
-        VK_CHECK(vkEnumeratePhysicalDevices(instance, &device_count, nullptr));
+        VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &device_count, nullptr));
         std::vector<VkPhysicalDevice> devices(device_count);
-        VK_CHECK(vkEnumeratePhysicalDevices(instance, &device_count, devices.data()));
+        VK_CHECK(vkEnumeratePhysicalDevices(vk_instance, &device_count, devices.data()));
 
-        physical_device = devices.empty() ? VK_NULL_HANDLE : devices[0];
+        vk_physical_device = devices.empty() ? VK_NULL_HANDLE : devices[0];
 
-        if (!physical_device)
+        if (!vk_physical_device)
             throw std::runtime_error("No suitable Vulkan device available!");
     }
 
     // check memory types
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+    vkGetPhysicalDeviceMemoryProperties(vk_physical_device, &vk_memory_properties);
 
     // check queues
     graphics_queue_family = static_cast<uint32_t>(-1);
     {
         uint32_t queue_family_count = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nullptr);
         std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-        vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, queue_families.data());
+        vkGetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, queue_families.data());
 
         for (uint32_t i = 0; i < queue_family_count; ++i) {
             if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
@@ -366,20 +385,20 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
             device_info.ppEnabledLayerNames = validation_layers.data();
         }
 
-        VK_CHECK(vkCreateDevice(physical_device, &device_info, nullptr, &device));
-        vkGetDeviceQueue(device, graphics_queue_family, 0, &queue);
+        VK_CHECK(vkCreateDevice(vk_physical_device, &device_info, nullptr, &vk_device));
+        vkGetDeviceQueue(vk_device, graphics_queue_family, 0, &vk_queue);
     }
 }
 
 DeviceImpl::~DeviceImpl()
 {
-    vkDestroyDevice(device, nullptr);
+    vkDestroyDevice(vk_device, nullptr);
 
     if (desc.enable_validation_layers) {
-        vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, nullptr);
+        vkDestroyDebugUtilsMessengerEXT(vk_instance, vk_debug_messenger, nullptr);
     }
 
-    vkDestroyInstance(instance, nullptr);
+    vkDestroyInstance(vk_instance, nullptr);
 }
 
 Device::Device(const DeviceDesc &desc) { m_impl = std::make_unique<DeviceImpl>(desc); }
@@ -397,7 +416,7 @@ ShaderHandle Device::create_shader(const ShaderDesc &desc)
     create_info.pCode = static_cast<const uint32_t *>(desc.code);
     create_info.codeSize = desc.code_size;
 
-    VK_CHECK(vkCreateShaderModule(m_impl->device, &create_info, nullptr, &shader->shader_module));
+    VK_CHECK(vkCreateShaderModule(m_impl->vk_device, &create_info, nullptr, &shader->vk_shader_module));
 
     return handle;
 }
@@ -408,7 +427,7 @@ void Device::destroy_shader(ShaderHandle handle)
     if (!shader)
         return;
 
-    vkDestroyShaderModule(m_impl->device, shader->shader_module, nullptr);
+    vkDestroyShaderModule(m_impl->vk_device, shader->vk_shader_module, nullptr);
     m_impl->shaders.free(handle);
 }
 
@@ -427,10 +446,10 @@ BufferHandle Device::create_buffer(const BufferDesc &desc)
     create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     create_info.queueFamilyIndexCount = 1;
     create_info.pQueueFamilyIndices = &m_impl->graphics_queue_family;
-    VK_CHECK(vkCreateBuffer(m_impl->device, &create_info, nullptr, &buffer->buffer));
+    VK_CHECK(vkCreateBuffer(m_impl->vk_device, &create_info, nullptr, &buffer->vk_buffer));
 
     VkMemoryRequirements memory_requirements;
-    vkGetBufferMemoryRequirements(m_impl->device, buffer->buffer, &memory_requirements);
+    vkGetBufferMemoryRequirements(m_impl->vk_device, buffer->vk_buffer, &memory_requirements);
 
     // VkMemoryAllocateFlagsInfo flags_info{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};
     // flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
@@ -439,8 +458,8 @@ BufferHandle Device::create_buffer(const BufferDesc &desc)
     // allocate_info.pNext = &flags_info;
     allocate_info.allocationSize = memory_requirements.size;
     allocate_info.memoryTypeIndex = m_impl->find_memory_type(memory_requirements.memoryTypeBits, desc.memory);
-    VK_CHECK(vkAllocateMemory(m_impl->device, &allocate_info, nullptr, &buffer->memory));
-    VK_CHECK(vkBindBufferMemory(m_impl->device, buffer->buffer, buffer->memory, 0));
+    VK_CHECK(vkAllocateMemory(m_impl->vk_device, &allocate_info, nullptr, &buffer->vk_device_memory));
+    VK_CHECK(vkBindBufferMemory(m_impl->vk_device, buffer->vk_buffer, buffer->vk_device_memory, 0));
 
     return handle;
 }
@@ -451,8 +470,8 @@ void Device::destroy_buffer(BufferHandle handle)
     if (!buffer)
         return;
 
-    vkDestroyBuffer(m_impl->device, buffer->buffer, nullptr);
-    vkFreeMemory(m_impl->device, buffer->memory, nullptr);
+    vkDestroyBuffer(m_impl->vk_device, buffer->vk_buffer, nullptr);
+    vkFreeMemory(m_impl->vk_device, buffer->vk_device_memory, nullptr);
     m_impl->buffers.free(handle);
 }
 
@@ -460,6 +479,11 @@ ImageHandle Device::create_image(const ImageDesc &desc)
 {
     ImageHandle handle = m_impl->images.alloc();
     ImageImpl *image = m_impl->images[handle];
+
+    image->desc = desc;
+
+    ResourceUsageInfo usage_info = get_resource_usage_info(desc.usage);
+
     return handle;
 }
 
@@ -483,7 +507,7 @@ SamplerHandle Device::create_sampler(const SamplerDesc &desc)
     create_info.addressModeV = SAMPLER_ADDRESS_MODE_MAP[static_cast<uint32_t>(desc.address_mode_v)];
     create_info.addressModeW = SAMPLER_ADDRESS_MODE_MAP[static_cast<uint32_t>(desc.address_mode_w)];
 
-    VK_CHECK(vkCreateSampler(m_impl->device, &create_info, nullptr, &sampler->sampler));
+    VK_CHECK(vkCreateSampler(m_impl->vk_device, &create_info, nullptr, &sampler->vk_sampler));
 
     return handle;
 }
@@ -494,7 +518,7 @@ void Device::destroy_sampler(SamplerHandle handle)
     if (!sampler)
         return;
 
-    vkDestroySampler(m_impl->device, sampler->sampler, nullptr);
+    vkDestroySampler(m_impl->vk_device, sampler->vk_sampler, nullptr);
     m_impl->samplers.free(handle);
 }
 
@@ -505,8 +529,10 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     for (const auto &b : desc.bindings) {
-        if (b.count == 0)
+        if (b.binding == PipelineDesc::INVALID_BINDING)
             continue;
+        FR_ASSERT(b.type != DescriptorType::Unknown);
+        FR_ASSERT(b.count >= 1);
         VkDescriptorSetLayoutBinding binding = {};
         binding.binding = b.binding;
         binding.descriptorType = DESCRIPTOR_TYPE_MAP[static_cast<size_t>(b.type)].type;
@@ -520,8 +546,8 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
     descriptor_set_layout_create_info.bindingCount = static_cast<uint32_t>(bindings.size());
     descriptor_set_layout_create_info.pBindings = bindings.data();
 
-    VK_CHECK(vkCreateDescriptorSetLayout(m_impl->device, &descriptor_set_layout_create_info, nullptr,
-                                         &pipeline->descriptor_set_layout));
+    VK_CHECK(vkCreateDescriptorSetLayout(m_impl->vk_device, &descriptor_set_layout_create_info, nullptr,
+                                         &pipeline->vk_descriptor_set_layout));
 
     VkPushConstantRange push_constant_range{};
     push_constant_range.offset = 0;
@@ -531,11 +557,12 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
     VkPipelineLayoutCreateInfo pipeline_layout_create_info{};
     pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipeline_layout_create_info.setLayoutCount = 1;
-    pipeline_layout_create_info.pSetLayouts = &pipeline->descriptor_set_layout;
+    pipeline_layout_create_info.pSetLayouts = &pipeline->vk_descriptor_set_layout;
     pipeline_layout_create_info.pushConstantRangeCount = desc.push_constants_size > 0 ? 1 : 0;
     pipeline_layout_create_info.pPushConstantRanges = desc.push_constants_size > 0 ? &push_constant_range : nullptr;
 
-    VK_CHECK(vkCreatePipelineLayout(m_impl->device, &pipeline_layout_create_info, nullptr, &pipeline->pipeline_layout));
+    VK_CHECK(vkCreatePipelineLayout(m_impl->vk_device, &pipeline_layout_create_info, nullptr,
+                                    &pipeline->vk_pipeline_layout));
 
     ShaderImpl *shader = m_impl->shaders[desc.shader];
     FR_ASSERT(shader);
@@ -544,16 +571,16 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
     VkPipelineShaderStageCreateInfo stage_create_info{};
     stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stage_create_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    stage_create_info.module = shader->shader_module;
+    stage_create_info.module = shader->vk_shader_module;
     stage_create_info.pName = shader->desc.entry_point_name;
 
     VkComputePipelineCreateInfo pipeline_create_info{};
     pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     pipeline_create_info.stage = stage_create_info;
-    pipeline_create_info.layout = pipeline->pipeline_layout;
+    pipeline_create_info.layout = pipeline->vk_pipeline_layout;
 
-    VK_CHECK(vkCreateComputePipelines(m_impl->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
-                                      &pipeline->pipeline));
+    VK_CHECK(vkCreateComputePipelines(m_impl->vk_device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
+                                      &pipeline->vk_pipeline));
 
     return handle;
 }
@@ -564,9 +591,59 @@ void Device::destroy_pipeline(PipelineHandle handle)
     if (!pipeline)
         return;
 
-    vkDestroyPipeline(m_impl->device, pipeline->pipeline, nullptr);
-    vkDestroyPipelineLayout(m_impl->device, pipeline->pipeline_layout, nullptr);
-    vkDestroyDescriptorSetLayout(m_impl->device, pipeline->descriptor_set_layout, nullptr);
+    vkDestroyPipeline(m_impl->vk_device, pipeline->vk_pipeline, nullptr);
+    vkDestroyPipelineLayout(m_impl->vk_device, pipeline->vk_pipeline_layout, nullptr);
+    vkDestroyDescriptorSetLayout(m_impl->vk_device, pipeline->vk_descriptor_set_layout, nullptr);
+}
+
+SequenceHandle Device::start_sequence()
+{
+    SequenceHandle handle = m_impl->sequences.alloc();
+    SequenceImpl *sequence = m_impl->sequences[handle];
+
+    VkSemaphoreCreateInfo semaphore_create_info{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VK_CHECK(vkCreateSemaphore(m_impl->vk_device, &semaphore_create_info, nullptr, &sequence->vk_semaphore));
+
+    return handle;
+}
+
+void Device::end_sequence(SequenceHandle sequence_handle)
+{
+    SequenceImpl *sequence = m_impl->sequences[sequence_handle];
+    if (!sequence)
+        return;
+}
+
+void Device::write_buffer(SequenceHandle sequence_handle, BufferHandle buffer_handle, const void *data, size_t size,
+                          size_t offset)
+{
+    SequenceImpl *sequence = m_impl->sequences[sequence_handle];
+    BufferImpl *buffer = m_impl->buffers[buffer_handle];
+    if (!sequence || !buffer)
+        return;
+
+    FR_ASSERT(buffer->desc.memory == MemoryType::Host);
+
+    void *buffer_data;
+    VK_CHECK(vkMapMemory(m_impl->vk_device, buffer->vk_device_memory, offset, size, 0, &buffer_data));
+    std::memcpy(buffer_data, data, size);
+    vkUnmapMemory(m_impl->vk_device, buffer->vk_device_memory);
+}
+
+void Device::read_buffer(SequenceHandle sequence_handle, BufferHandle buffer_handle, void *data, size_t size,
+                         size_t offset)
+{
+    SequenceImpl *sequence = m_impl->sequences[sequence_handle];
+    BufferImpl *buffer = m_impl->buffers[buffer_handle];
+    if (!sequence || !buffer)
+        return;
+
+    FR_ASSERT(buffer->desc.memory == MemoryType::Host);
+
+    void *buffer_data;
+    VK_CHECK(vkMapMemory(m_impl->vk_device, buffer->vk_device_memory, offset, size, 0, &buffer_data));
+    std::memcpy(data, buffer_data, size);
+    vkUnmapMemory(m_impl->vk_device, buffer->vk_device_memory);
 }
 
 FR_NAMESPACE_END
