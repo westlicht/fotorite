@@ -54,6 +54,10 @@ FetchContent_MakeAvailable(dxc)
 
 set(DXC ${dxc_SOURCE_DIR}/${DXC_REL_PATH})
 
+if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    file(CHMOD ${DXC} FILE_PERMISSIONS OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE)
+endif()
+
 # -----------------------------------------------------------------------------
 # shaders
 # -----------------------------------------------------------------------------
