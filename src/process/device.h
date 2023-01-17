@@ -55,10 +55,18 @@ enum class ResourceUsage : uint32_t {
 };
 FR_ENUM_FLAG_OPERATORS(ResourceUsage)
 
+enum class ResourceState : uint32_t {
+    Undefined,
+    ConstantBuffer,
+    UnorderedAccess,
+    ShaderResource,
+    TransferDst,
+    TransferSrc,
+};
+
 enum class MemoryType : uint32_t {
     Host,
     Device,
-    DeviceOnly,
 };
 
 enum class DescriptorType : uint32_t {
@@ -100,7 +108,9 @@ using BufferHandle = Handle<struct BufferTag>;
 using ImageHandle = Handle<struct ImageTag>;
 using SamplerHandle = Handle<struct SamplerTag>;
 using PipelineHandle = Handle<struct PipelineTag>;
-using SequenceHandle = Handle<struct SequenceTag>;
+using ContextHandle = Handle<struct ContextTag>;
+
+using ResourceHandle = std::variant<BufferHandle, ImageHandle, SamplerHandle>;
 
 struct DeviceDesc {
     bool enable_validation_layers{false};
@@ -151,7 +161,7 @@ struct DispatchDesc {
     PipelineHandle pipeline;
     struct {
         uint32_t binding{0};
-        std::variant<BufferHandle, ImageHandle, SamplerHandle> resource;
+        ResourceHandle resource;
     } bindings[4];
     const void *push_constants;
     uint32_t push_constants_size;
@@ -163,35 +173,37 @@ public:
     ~Device();
 
     ShaderHandle create_shader(const ShaderDesc &desc);
-    void destroy_shader(ShaderHandle handle);
+    void destroy_shader(ShaderHandle shader);
 
     BufferHandle create_buffer(const BufferDesc &desc);
-    void destroy_buffer(BufferHandle handle);
+    void destroy_buffer(BufferHandle buffer);
 
     ImageHandle create_image(const ImageDesc &desc);
-    void destroy_image(ImageHandle handle);
+    void destroy_image(ImageHandle image);
 
     SamplerHandle create_sampler(const SamplerDesc &desc);
-    void destroy_sampler(SamplerHandle handle);
+    void destroy_sampler(SamplerHandle sampler);
 
     PipelineHandle create_pipeline(const PipelineDesc &desc);
-    void destroy_pipeline(PipelineHandle handle);
+    void destroy_pipeline(PipelineHandle pipeline);
+
+    ContextHandle create_context();
+    void destroy_context(ContextHandle context);
 
     // void bind_pipeline(PipelineHandle pipeline);
     // void set_push_constants();
 
-    SequenceHandle start_sequence();
-    void end_sequence(SequenceHandle sequence_handle);
-    void wait_sequence(SequenceHandle sequence_handle);
+    void write_buffer(ContextHandle context, BufferHandle buffer, const void *data, size_t size, size_t offset = 0);
+    void read_buffer(ContextHandle context, BufferHandle buffer, void *data, size_t size, size_t offset = 0);
 
-    void write_buffer(SequenceHandle sequence_handle, BufferHandle buffer_handle, const void *data, size_t size,
-                      size_t offset = 0);
-    void read_buffer(SequenceHandle sequence_handle, BufferHandle buffer_handle, void *data, size_t size,
-                     size_t offset = 0);
+    void copy_buffer(ContextHandle context, BufferHandle src, BufferHandle dst, size_t size, size_t src_offset = 0,
+                     size_t dst_offset = 0);
+    void copy_image(ContextHandle context);
 
-    void copy_buffer(SequenceHandle sequence_handle);
-    void copy_image(SequenceHandle sequence_handle);
-    void dispatch(DispatchDesc desc);
+    void dispatch(ContextHandle context, DispatchDesc desc);
+
+    void submit(ContextHandle context);
+    void wait(ContextHandle context);
 
     void flush();
 

@@ -91,8 +91,6 @@ const VkMemoryPropertyFlags MEMORY_TYPE_MAP[] = {
     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
     // MemoryType::Device
     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-    // MemoryType::DeviceOnly
-    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 };
 
 struct ResourceUsageInfo {
@@ -126,6 +124,26 @@ inline ResourceUsageInfo get_resource_usage_info(ResourceUsage usage)
     }
     return info;
 }
+
+struct ResourceStateInfo {
+    VkImageLayout layout;
+    VkAccessFlags access;
+};
+
+const ResourceStateInfo RESOURCE_STATE_MAP[] = {
+    // ResourceState::Undefined
+    {VK_IMAGE_LAYOUT_UNDEFINED, 0},
+    // ResourceState::ConstantBuffer
+    {VK_IMAGE_LAYOUT_UNDEFINED, 0},
+    // ResourceState::UnorderedAccess
+    {VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT},
+    // ResourceState::ShaderResource
+    {VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT},
+    // ResourceState::TransferDst
+    {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT},
+    // ResourceState::TransferSrc
+    {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT},
+};
 
 struct DescriptorTypeInfo {
     VkDescriptorType type;
@@ -196,12 +214,14 @@ struct ShaderImpl {
 
 struct BufferImpl {
     BufferDesc desc;
+    ResourceState state;
     VkDeviceMemory vk_device_memory;
     VkBuffer vk_buffer;
 };
 
 struct ImageImpl {
     ImageDesc desc;
+    ResourceState state;
     VkImage vk_image;
 };
 
@@ -217,18 +237,9 @@ struct PipelineImpl {
     VkPipeline vk_pipeline;
 };
 
-struct SequenceImpl {
+struct ContextImpl {
     VkCommandBuffer vk_command_buffer;
-    VkSemaphore vk_semaphore;
-};
-
-struct TransientHeap {
-    // VkDescriptorPool vk_descriptor_pool;
-    // VkCommandPool vk_command_pool;
-
-    void init() {}
-
-    void destroy() {}
+    VkFence vk_fence;
 };
 
 struct DeviceImpl {
@@ -256,14 +267,15 @@ struct DeviceImpl {
     uint32_t graphics_queue_family;
     VkQueue vk_queue;
 
-    TransientHeap transient_heaps[4];
+    VkDescriptorPool vk_descriptor_pool;
+    VkCommandPool vk_command_pool;
 
     Pool<ShaderImpl, ShaderHandle> shaders;
     Pool<BufferImpl, BufferHandle> buffers;
     Pool<ImageImpl, ImageHandle> images;
     Pool<SamplerImpl, SamplerHandle> samplers;
     Pool<PipelineImpl, PipelineHandle> pipelines;
-    Pool<SequenceImpl, SequenceHandle> sequences;
+    Pool<ContextImpl, ContextHandle> contexts;
 };
 
 DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
@@ -388,10 +400,53 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
         VK_CHECK(vkCreateDevice(vk_physical_device, &device_info, nullptr, &vk_device));
         vkGetDeviceQueue(vk_device, graphics_queue_family, 0, &vk_queue);
     }
+
+    // create descriptor pool
+    {
+        uint32_t set_count = 100;
+        uint32_t descriptor_count = 1000;
+
+        const VkDescriptorPoolSize sizes[] = {
+            {VK_DESCRIPTOR_TYPE_SAMPLER, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, descriptor_count},
+            {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, descriptor_count},
+        };
+
+        VkDescriptorPoolCreateInfo create_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        create_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+        create_info.maxSets = set_count;
+        create_info.poolSizeCount = static_cast<uint32_t>(std::size(sizes));
+        create_info.pPoolSizes = sizes;
+
+        VK_CHECK(vkCreateDescriptorPool(vk_device, &create_info, nullptr, &vk_descriptor_pool));
+    }
+
+    // create command pool
+    {
+        VkCommandPoolCreateInfo create_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+        // create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        create_info.queueFamilyIndex = graphics_queue_family;
+
+        VK_CHECK(vkCreateCommandPool(vk_device, &create_info, nullptr, &vk_command_pool));
+    }
 }
 
 DeviceImpl::~DeviceImpl()
 {
+    vkDeviceWaitIdle(vk_device);
+
+    vkDestroyCommandPool(vk_device, vk_command_pool, nullptr);
+    vkDestroyDescriptorPool(vk_device, vk_descriptor_pool, nullptr);
+
     vkDestroyDevice(vk_device, nullptr);
 
     if (desc.enable_validation_layers) {
@@ -401,42 +456,65 @@ DeviceImpl::~DeviceImpl()
     vkDestroyInstance(vk_instance, nullptr);
 }
 
+inline void transition_state(DeviceImpl &device, ContextImpl &context, BufferImpl &buffer, ResourceState new_state)
+{
+    ResourceState old_state = buffer.state;
+    buffer.state = new_state;
+
+    const ResourceStateInfo &old_info = RESOURCE_STATE_MAP[static_cast<size_t>(old_state)];
+    const ResourceStateInfo &new_info = RESOURCE_STATE_MAP[static_cast<size_t>(new_state)];
+
+    VkBufferMemoryBarrier buffer_memory_barrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+    buffer_memory_barrier.srcAccessMask = old_info.access;
+    buffer_memory_barrier.dstAccessMask = new_info.access;
+    buffer_memory_barrier.srcQueueFamilyIndex = device.graphics_queue_family;
+    buffer_memory_barrier.dstQueueFamilyIndex = device.graphics_queue_family;
+    buffer_memory_barrier.buffer = buffer.vk_buffer;
+    buffer_memory_barrier.offset = 0;
+    buffer_memory_barrier.size = VK_WHOLE_SIZE;
+
+    vkCmdPipelineBarrier(context.vk_command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VkDependencyFlags(0), 0, nullptr, 1,
+                         &buffer_memory_barrier, 0, nullptr);
+}
+
 Device::Device(const DeviceDesc &desc) { m_impl = std::make_unique<DeviceImpl>(desc); }
 
 Device::~Device() {}
 
 ShaderHandle Device::create_shader(const ShaderDesc &desc)
 {
-    ShaderHandle handle = m_impl->shaders.alloc();
-    ShaderImpl *shader = m_impl->shaders[handle];
+    ShaderHandle shader = m_impl->shaders.alloc();
+    ShaderImpl *shader_impl = m_impl->shaders[shader];
 
-    shader->desc = desc;
+    shader_impl->desc = desc;
 
     VkShaderModuleCreateInfo create_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
     create_info.pCode = static_cast<const uint32_t *>(desc.code);
     create_info.codeSize = desc.code_size;
 
-    VK_CHECK(vkCreateShaderModule(m_impl->vk_device, &create_info, nullptr, &shader->vk_shader_module));
+    VK_CHECK(vkCreateShaderModule(m_impl->vk_device, &create_info, nullptr, &shader_impl->vk_shader_module));
 
-    return handle;
+    return shader;
 }
 
-void Device::destroy_shader(ShaderHandle handle)
+void Device::destroy_shader(ShaderHandle shader)
 {
-    ShaderImpl *shader = m_impl->shaders[handle];
-    if (!shader)
+    ShaderImpl *shader_impl = m_impl->shaders[shader];
+    if (!shader_impl)
         return;
 
-    vkDestroyShaderModule(m_impl->vk_device, shader->vk_shader_module, nullptr);
-    m_impl->shaders.free(handle);
+    vkDestroyShaderModule(m_impl->vk_device, shader_impl->vk_shader_module, nullptr);
+    m_impl->shaders.free(shader);
 }
 
 BufferHandle Device::create_buffer(const BufferDesc &desc)
 {
-    BufferHandle handle = m_impl->buffers.alloc();
-    BufferImpl *buffer = m_impl->buffers[handle];
+    BufferHandle buffer = m_impl->buffers.alloc();
+    BufferImpl *buffer_impl = m_impl->buffers[buffer];
 
-    buffer->desc = desc;
+    buffer_impl->desc = desc;
+    buffer_impl->state = ResourceState::Undefined;
 
     ResourceUsageInfo usage_info = get_resource_usage_info(desc.usage);
 
@@ -446,10 +524,10 @@ BufferHandle Device::create_buffer(const BufferDesc &desc)
     create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     create_info.queueFamilyIndexCount = 1;
     create_info.pQueueFamilyIndices = &m_impl->graphics_queue_family;
-    VK_CHECK(vkCreateBuffer(m_impl->vk_device, &create_info, nullptr, &buffer->vk_buffer));
+    VK_CHECK(vkCreateBuffer(m_impl->vk_device, &create_info, nullptr, &buffer_impl->vk_buffer));
 
     VkMemoryRequirements memory_requirements;
-    vkGetBufferMemoryRequirements(m_impl->vk_device, buffer->vk_buffer, &memory_requirements);
+    vkGetBufferMemoryRequirements(m_impl->vk_device, buffer_impl->vk_buffer, &memory_requirements);
 
     // VkMemoryAllocateFlagsInfo flags_info{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};
     // flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
@@ -458,46 +536,49 @@ BufferHandle Device::create_buffer(const BufferDesc &desc)
     // allocate_info.pNext = &flags_info;
     allocate_info.allocationSize = memory_requirements.size;
     allocate_info.memoryTypeIndex = m_impl->find_memory_type(memory_requirements.memoryTypeBits, desc.memory);
-    VK_CHECK(vkAllocateMemory(m_impl->vk_device, &allocate_info, nullptr, &buffer->vk_device_memory));
-    VK_CHECK(vkBindBufferMemory(m_impl->vk_device, buffer->vk_buffer, buffer->vk_device_memory, 0));
+    VK_CHECK(vkAllocateMemory(m_impl->vk_device, &allocate_info, nullptr, &buffer_impl->vk_device_memory));
+    VK_CHECK(vkBindBufferMemory(m_impl->vk_device, buffer_impl->vk_buffer, buffer_impl->vk_device_memory, 0));
 
-    return handle;
+    return buffer;
 }
 
-void Device::destroy_buffer(BufferHandle handle)
+void Device::destroy_buffer(BufferHandle buffer)
 {
-    BufferImpl *buffer = m_impl->buffers[handle];
-    if (!buffer)
+    BufferImpl *buffer_impl = m_impl->buffers[buffer];
+    if (!buffer_impl)
         return;
 
-    vkDestroyBuffer(m_impl->vk_device, buffer->vk_buffer, nullptr);
-    vkFreeMemory(m_impl->vk_device, buffer->vk_device_memory, nullptr);
-    m_impl->buffers.free(handle);
+    vkDestroyBuffer(m_impl->vk_device, buffer_impl->vk_buffer, nullptr);
+    vkFreeMemory(m_impl->vk_device, buffer_impl->vk_device_memory, nullptr);
+    m_impl->buffers.free(buffer);
 }
 
 ImageHandle Device::create_image(const ImageDesc &desc)
 {
-    ImageHandle handle = m_impl->images.alloc();
-    ImageImpl *image = m_impl->images[handle];
+    ImageHandle image = m_impl->images.alloc();
+    ImageImpl *image_impl = m_impl->images[image];
 
-    image->desc = desc;
+    image_impl->desc = desc;
+    image_impl->state = ResourceState::Undefined;
 
     ResourceUsageInfo usage_info = get_resource_usage_info(desc.usage);
 
-    return handle;
+    return image;
 }
 
-void Device::destroy_image(ImageHandle handle)
+void Device::destroy_image(ImageHandle image)
 {
-    ImageImpl *image = m_impl->images[handle];
-    if (!image)
+    ImageImpl *image_impl = m_impl->images[image];
+    if (!image_impl)
         return;
+
+    m_impl->images.free(image);
 }
 
 SamplerHandle Device::create_sampler(const SamplerDesc &desc)
 {
-    SamplerHandle handle = m_impl->samplers.alloc();
-    SamplerImpl *sampler = m_impl->samplers[handle];
+    SamplerHandle sampler = m_impl->samplers.alloc();
+    SamplerImpl *sampler_impl = m_impl->samplers[sampler];
 
     VkSamplerCreateInfo create_info{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     create_info.magFilter = SAMPLER_FILTER_MAP[static_cast<uint32_t>(desc.mag_filter)];
@@ -507,25 +588,25 @@ SamplerHandle Device::create_sampler(const SamplerDesc &desc)
     create_info.addressModeV = SAMPLER_ADDRESS_MODE_MAP[static_cast<uint32_t>(desc.address_mode_v)];
     create_info.addressModeW = SAMPLER_ADDRESS_MODE_MAP[static_cast<uint32_t>(desc.address_mode_w)];
 
-    VK_CHECK(vkCreateSampler(m_impl->vk_device, &create_info, nullptr, &sampler->vk_sampler));
+    VK_CHECK(vkCreateSampler(m_impl->vk_device, &create_info, nullptr, &sampler_impl->vk_sampler));
 
-    return handle;
+    return sampler;
 }
 
-void Device::destroy_sampler(SamplerHandle handle)
+void Device::destroy_sampler(SamplerHandle sampler)
 {
-    SamplerImpl *sampler = m_impl->samplers[handle];
-    if (!sampler)
+    SamplerImpl *sampler_impl = m_impl->samplers[sampler];
+    if (!sampler_impl)
         return;
 
-    vkDestroySampler(m_impl->vk_device, sampler->vk_sampler, nullptr);
-    m_impl->samplers.free(handle);
+    vkDestroySampler(m_impl->vk_device, sampler_impl->vk_sampler, nullptr);
+    m_impl->samplers.free(sampler);
 }
 
 PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
 {
-    PipelineHandle handle = m_impl->pipelines.alloc();
-    PipelineImpl *pipeline = m_impl->pipelines[handle];
+    PipelineHandle pipeline = m_impl->pipelines.alloc();
+    PipelineImpl *pipeline_impl = m_impl->pipelines[pipeline];
 
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     for (const auto &b : desc.bindings) {
@@ -547,7 +628,7 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
     descriptor_set_layout_create_info.pBindings = bindings.data();
 
     VK_CHECK(vkCreateDescriptorSetLayout(m_impl->vk_device, &descriptor_set_layout_create_info, nullptr,
-                                         &pipeline->vk_descriptor_set_layout));
+                                         &pipeline_impl->vk_descriptor_set_layout));
 
     VkPushConstantRange push_constant_range{};
     push_constant_range.offset = 0;
@@ -557,12 +638,12 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
     VkPipelineLayoutCreateInfo pipeline_layout_create_info{};
     pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipeline_layout_create_info.setLayoutCount = 1;
-    pipeline_layout_create_info.pSetLayouts = &pipeline->vk_descriptor_set_layout;
+    pipeline_layout_create_info.pSetLayouts = &pipeline_impl->vk_descriptor_set_layout;
     pipeline_layout_create_info.pushConstantRangeCount = desc.push_constants_size > 0 ? 1 : 0;
     pipeline_layout_create_info.pPushConstantRanges = desc.push_constants_size > 0 ? &push_constant_range : nullptr;
 
     VK_CHECK(vkCreatePipelineLayout(m_impl->vk_device, &pipeline_layout_create_info, nullptr,
-                                    &pipeline->vk_pipeline_layout));
+                                    &pipeline_impl->vk_pipeline_layout));
 
     ShaderImpl *shader = m_impl->shaders[desc.shader];
     FR_ASSERT(shader);
@@ -577,73 +658,121 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
     VkComputePipelineCreateInfo pipeline_create_info{};
     pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     pipeline_create_info.stage = stage_create_info;
-    pipeline_create_info.layout = pipeline->vk_pipeline_layout;
+    pipeline_create_info.layout = pipeline_impl->vk_pipeline_layout;
 
     VK_CHECK(vkCreateComputePipelines(m_impl->vk_device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
-                                      &pipeline->vk_pipeline));
+                                      &pipeline_impl->vk_pipeline));
 
-    return handle;
+    return pipeline;
 }
 
-void Device::destroy_pipeline(PipelineHandle handle)
+void Device::destroy_pipeline(PipelineHandle pipeline)
 {
-    PipelineImpl *pipeline = m_impl->pipelines[handle];
-    if (!pipeline)
+    PipelineImpl *pipeline_impl = m_impl->pipelines[pipeline];
+    if (!pipeline_impl)
         return;
 
-    vkDestroyPipeline(m_impl->vk_device, pipeline->vk_pipeline, nullptr);
-    vkDestroyPipelineLayout(m_impl->vk_device, pipeline->vk_pipeline_layout, nullptr);
-    vkDestroyDescriptorSetLayout(m_impl->vk_device, pipeline->vk_descriptor_set_layout, nullptr);
+    vkDestroyPipeline(m_impl->vk_device, pipeline_impl->vk_pipeline, nullptr);
+    vkDestroyPipelineLayout(m_impl->vk_device, pipeline_impl->vk_pipeline_layout, nullptr);
+    vkDestroyDescriptorSetLayout(m_impl->vk_device, pipeline_impl->vk_descriptor_set_layout, nullptr);
+
+    m_impl->pipelines.free(pipeline);
 }
 
-SequenceHandle Device::start_sequence()
+ContextHandle Device::create_context()
 {
-    SequenceHandle handle = m_impl->sequences.alloc();
-    SequenceImpl *sequence = m_impl->sequences[handle];
+    ContextHandle context = m_impl->contexts.alloc();
+    ContextImpl *context_impl = m_impl->contexts[context];
 
-    VkSemaphoreCreateInfo semaphore_create_info{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VK_CHECK(vkCreateSemaphore(m_impl->vk_device, &semaphore_create_info, nullptr, &sequence->vk_semaphore));
+    VkFenceCreateInfo fence_create_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    VK_CHECK(vkCreateFence(m_impl->vk_device, &fence_create_info, nullptr, &context_impl->vk_fence));
 
-    return handle;
+    VkCommandBufferAllocateInfo alloc_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    alloc_info.commandPool = m_impl->vk_command_pool;
+    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc_info.commandBufferCount = 1;
+
+    VK_CHECK(vkAllocateCommandBuffers(m_impl->vk_device, &alloc_info, &context_impl->vk_command_buffer));
+
+    VkCommandBufferBeginInfo begin_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    VK_CHECK(vkBeginCommandBuffer(context_impl->vk_command_buffer, &begin_info));
+
+    return context;
 }
 
-void Device::end_sequence(SequenceHandle sequence_handle)
+void Device::destroy_context(ContextHandle context)
 {
-    SequenceImpl *sequence = m_impl->sequences[sequence_handle];
-    if (!sequence)
+    ContextImpl *context_impl = m_impl->contexts[context];
+    if (!context_impl)
         return;
+
+    VK_CHECK(vkEndCommandBuffer(context_impl->vk_command_buffer));
+
+    VkSubmitInfo submit_info{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &context_impl->vk_command_buffer;
+
+    VK_CHECK(vkQueueSubmit(m_impl->vk_queue, 1, &submit_info, context_impl->vk_fence));
+
+    VK_CHECK(vkWaitForFences(m_impl->vk_device, 1, &context_impl->vk_fence, VK_TRUE, 1000000000));
+
+    vkDestroyFence(m_impl->vk_device, context_impl->vk_fence, nullptr);
+    vkFreeCommandBuffers(m_impl->vk_device, m_impl->vk_command_pool, 1, &context_impl->vk_command_buffer);
+
+    m_impl->contexts.free(context);
 }
 
-void Device::write_buffer(SequenceHandle sequence_handle, BufferHandle buffer_handle, const void *data, size_t size,
-                          size_t offset)
+void Device::write_buffer(ContextHandle context, BufferHandle buffer, const void *data, size_t size, size_t offset)
 {
-    SequenceImpl *sequence = m_impl->sequences[sequence_handle];
-    BufferImpl *buffer = m_impl->buffers[buffer_handle];
-    if (!sequence || !buffer)
+    ContextImpl *context_impl = m_impl->contexts[context];
+    BufferImpl *buffer_impl = m_impl->buffers[buffer];
+    if (!context_impl || !buffer_impl)
         return;
 
-    FR_ASSERT(buffer->desc.memory == MemoryType::Host);
+    FR_ASSERT(buffer_impl->desc.memory == MemoryType::Host);
 
     void *buffer_data;
-    VK_CHECK(vkMapMemory(m_impl->vk_device, buffer->vk_device_memory, offset, size, 0, &buffer_data));
+    VK_CHECK(vkMapMemory(m_impl->vk_device, buffer_impl->vk_device_memory, offset, size, 0, &buffer_data));
     std::memcpy(buffer_data, data, size);
-    vkUnmapMemory(m_impl->vk_device, buffer->vk_device_memory);
+    vkUnmapMemory(m_impl->vk_device, buffer_impl->vk_device_memory);
 }
 
-void Device::read_buffer(SequenceHandle sequence_handle, BufferHandle buffer_handle, void *data, size_t size,
-                         size_t offset)
+void Device::read_buffer(ContextHandle context, BufferHandle buffer, void *data, size_t size, size_t offset)
 {
-    SequenceImpl *sequence = m_impl->sequences[sequence_handle];
-    BufferImpl *buffer = m_impl->buffers[buffer_handle];
-    if (!sequence || !buffer)
+    ContextImpl *context_impl = m_impl->contexts[context];
+    BufferImpl *buffer_impl = m_impl->buffers[buffer];
+    if (!context_impl || !buffer_impl)
         return;
 
-    FR_ASSERT(buffer->desc.memory == MemoryType::Host);
+    FR_ASSERT(buffer_impl->desc.memory == MemoryType::Host);
 
     void *buffer_data;
-    VK_CHECK(vkMapMemory(m_impl->vk_device, buffer->vk_device_memory, offset, size, 0, &buffer_data));
+    VK_CHECK(vkMapMemory(m_impl->vk_device, buffer_impl->vk_device_memory, offset, size, 0, &buffer_data));
     std::memcpy(data, buffer_data, size);
-    vkUnmapMemory(m_impl->vk_device, buffer->vk_device_memory);
+    vkUnmapMemory(m_impl->vk_device, buffer_impl->vk_device_memory);
+}
+
+void Device::copy_buffer(ContextHandle context, BufferHandle src, BufferHandle dst, size_t size, size_t src_offset,
+                         size_t dst_offset)
+{
+    ContextImpl *context_impl = m_impl->contexts[context];
+    BufferImpl *src_impl = m_impl->buffers[src];
+    BufferImpl *dst_impl = m_impl->buffers[dst];
+
+    if (!context_impl || !src_impl || !dst_impl || size == 0)
+        return;
+
+    transition_state(*m_impl, *context_impl, *src_impl, ResourceState::TransferSrc);
+    transition_state(*m_impl, *context_impl, *dst_impl, ResourceState::TransferDst);
+
+    VkBufferCopy buffer_copy{};
+    buffer_copy.srcOffset = src_offset;
+    buffer_copy.dstOffset = dst_offset;
+    buffer_copy.size = size;
+
+    vkCmdCopyBuffer(context_impl->vk_command_buffer, src_impl->vk_buffer, dst_impl->vk_buffer, 1, &buffer_copy);
 }
 
 FR_NAMESPACE_END
