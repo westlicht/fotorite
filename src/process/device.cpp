@@ -240,6 +240,10 @@ struct PipelineImpl {
 struct ContextImpl {
     VkCommandBuffer vk_command_buffer;
     VkFence vk_fence;
+
+    bool is_recording;
+
+    std::vector<ResourceHandle> transient_resources;
 };
 
 struct DeviceImpl {
@@ -684,6 +688,8 @@ ContextHandle Device::create_context()
     ContextHandle context = m_impl->contexts.alloc();
     ContextImpl *context_impl = m_impl->contexts[context];
 
+    context_impl->is_recording = false;
+
     VkFenceCreateInfo fence_create_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     VK_CHECK(vkCreateFence(m_impl->vk_device, &fence_create_info, nullptr, &context_impl->vk_fence));
 
@@ -694,11 +700,6 @@ ContextHandle Device::create_context()
 
     VK_CHECK(vkAllocateCommandBuffers(m_impl->vk_device, &alloc_info, &context_impl->vk_command_buffer));
 
-    VkCommandBufferBeginInfo begin_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    VK_CHECK(vkBeginCommandBuffer(context_impl->vk_command_buffer, &begin_info));
-
     return context;
 }
 
@@ -708,14 +709,6 @@ void Device::destroy_context(ContextHandle context)
     if (!context_impl)
         return;
 
-    VK_CHECK(vkEndCommandBuffer(context_impl->vk_command_buffer));
-
-    VkSubmitInfo submit_info{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &context_impl->vk_command_buffer;
-
-    VK_CHECK(vkQueueSubmit(m_impl->vk_queue, 1, &submit_info, context_impl->vk_fence));
-
     VK_CHECK(vkWaitForFences(m_impl->vk_device, 1, &context_impl->vk_fence, VK_TRUE, 1000000000));
 
     vkDestroyFence(m_impl->vk_device, context_impl->vk_fence, nullptr);
@@ -724,34 +717,108 @@ void Device::destroy_context(ContextHandle context)
     m_impl->contexts.free(context);
 }
 
+void Device::begin(ContextHandle context)
+{
+    ContextImpl *context_impl = m_impl->contexts[context];
+    if (!context_impl)
+        return;
+
+    FR_ASSERT(!context_impl->is_recording);
+
+    VkCommandBufferBeginInfo begin_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    VK_CHECK(vkBeginCommandBuffer(context_impl->vk_command_buffer, &begin_info));
+
+    context_impl->is_recording = true;
+}
+void Device::submit(ContextHandle context)
+{
+    ContextImpl *context_impl = m_impl->contexts[context];
+    if (!context_impl)
+        return;
+
+    FR_ASSERT(context_impl->is_recording);
+
+    VK_CHECK(vkEndCommandBuffer(context_impl->vk_command_buffer));
+
+    VkSubmitInfo submit_info{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &context_impl->vk_command_buffer;
+
+    VK_CHECK(vkQueueSubmit(m_impl->vk_queue, 1, &submit_info, context_impl->vk_fence));
+}
+void Device::wait(ContextHandle context)
+{
+    ContextImpl *context_impl = m_impl->contexts[context];
+    if (!context_impl)
+        return;
+}
+
 void Device::write_buffer(ContextHandle context, BufferHandle buffer, const void *data, size_t size, size_t offset)
 {
     ContextImpl *context_impl = m_impl->contexts[context];
     BufferImpl *buffer_impl = m_impl->buffers[buffer];
-    if (!context_impl || !buffer_impl)
+    if (!context_impl || !buffer_impl || size == 0)
         return;
 
-    FR_ASSERT(buffer_impl->desc.memory == MemoryType::Host);
+    FR_ASSERT(data);
 
-    void *buffer_data;
-    VK_CHECK(vkMapMemory(m_impl->vk_device, buffer_impl->vk_device_memory, offset, size, 0, &buffer_data));
-    std::memcpy(buffer_data, data, size);
-    vkUnmapMemory(m_impl->vk_device, buffer_impl->vk_device_memory);
+    if (buffer_impl->desc.memory == MemoryType::Host) {
+        void *buffer_data;
+        VK_CHECK(vkMapMemory(m_impl->vk_device, buffer_impl->vk_device_memory, offset, size, 0, &buffer_data));
+        std::memcpy(buffer_data, data, size);
+        vkUnmapMemory(m_impl->vk_device, buffer_impl->vk_device_memory);
+    } else if (buffer_impl->desc.memory == MemoryType::Device) {
+        // create staging buffer
+        BufferHandle staging_buffer = create_buffer({
+            .size = size,
+            .usage = ResourceUsage::TransferSrc,
+            .memory = MemoryType::Host,
+        });
+        write_buffer(context, staging_buffer, data, size);
+
+        submit(context);
+        wait(context);
+        begin(context);
+
+        copy_buffer(context, staging_buffer, buffer, size, 0, offset);
+
+        context_impl->transient_resources.push_back(staging_buffer);
+    }
 }
 
 void Device::read_buffer(ContextHandle context, BufferHandle buffer, void *data, size_t size, size_t offset)
 {
     ContextImpl *context_impl = m_impl->contexts[context];
     BufferImpl *buffer_impl = m_impl->buffers[buffer];
-    if (!context_impl || !buffer_impl)
+    if (!context_impl || !buffer_impl || size == 0)
         return;
 
-    FR_ASSERT(buffer_impl->desc.memory == MemoryType::Host);
+    FR_ASSERT(data);
 
-    void *buffer_data;
-    VK_CHECK(vkMapMemory(m_impl->vk_device, buffer_impl->vk_device_memory, offset, size, 0, &buffer_data));
-    std::memcpy(data, buffer_data, size);
-    vkUnmapMemory(m_impl->vk_device, buffer_impl->vk_device_memory);
+    if (buffer_impl->desc.memory == MemoryType::Host) {
+        void *buffer_data;
+        VK_CHECK(vkMapMemory(m_impl->vk_device, buffer_impl->vk_device_memory, offset, size, 0, &buffer_data));
+        std::memcpy(data, buffer_data, size);
+        vkUnmapMemory(m_impl->vk_device, buffer_impl->vk_device_memory);
+    } else if (buffer_impl->desc.memory == MemoryType::Device) {
+        // create staging buffer
+        BufferHandle staging_buffer = create_buffer({
+            .size = size,
+            .usage = ResourceUsage::TransferDst,
+            .memory = MemoryType::Host,
+        });
+        copy_buffer(context, buffer, staging_buffer, size, offset, 0);
+
+        submit(context);
+        wait(context);
+        begin(context);
+
+        read_buffer(context, staging_buffer, data, size);
+
+        context_impl->transient_resources.push_back(staging_buffer);
+    }
 }
 
 void Device::copy_buffer(ContextHandle context, BufferHandle src, BufferHandle dst, size_t size, size_t src_offset,

@@ -190,8 +190,9 @@ public:
     ContextHandle create_context();
     void destroy_context(ContextHandle context);
 
-    // void bind_pipeline(PipelineHandle pipeline);
-    // void set_push_constants();
+    void begin(ContextHandle context);
+    void submit(ContextHandle context);
+    void wait(ContextHandle context);
 
     void write_buffer(ContextHandle context, BufferHandle buffer, const void *data, size_t size, size_t offset = 0);
     void read_buffer(ContextHandle context, BufferHandle buffer, void *data, size_t size, size_t offset = 0);
@@ -201,11 +202,6 @@ public:
     void copy_image(ContextHandle context);
 
     void dispatch(ContextHandle context, DispatchDesc desc);
-
-    void submit(ContextHandle context);
-    void wait(ContextHandle context);
-
-    void flush();
 
 private:
     std::unique_ptr<DeviceImpl> m_impl;

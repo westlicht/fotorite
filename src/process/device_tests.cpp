@@ -90,8 +90,11 @@ TEST_CASE("compute" * doctest::skip(FOTORITE_GITHUB_CI))
     });
 
     ContextHandle context = device.create_context();
+    device.begin(context);
     device.copy_buffer(context, buffer0, buffer1, N * sizeof(float));
     device.copy_buffer(context, buffer1, result, N * sizeof(float));
+    device.submit(context);
+    device.wait(context);
 #if 0
     device.write_buffer(sequence, buffer0, buffer0_data.data(), N * sizeof(float));
     device.write_buffer(sequence, buffer1, buffer1_data.data(), N * sizeof(float));
