@@ -203,7 +203,16 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverity
                                                      const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
                                                      void *user_data)
 {
+    if (!(type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT))
+        return VK_FALSE;
+
     spdlog::info("VK: {}", callback_data->pMessage);
+
+    // VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT = 0x00000001,
+    // VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT = 0x00000002,
+    // VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT = 0x00000004,
+    // VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT = 0x00000008,
+
     return VK_FALSE;
 }
 
@@ -426,7 +435,8 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
         };
 
         VkDescriptorPoolCreateInfo create_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-        create_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+        create_info.flags =
+            VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT / VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
         create_info.maxSets = set_count;
         create_info.poolSizeCount = static_cast<uint32_t>(std::size(sizes));
         create_info.pPoolSizes = sizes;
@@ -437,7 +447,7 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
     // create command pool
     {
         VkCommandPoolCreateInfo create_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
-        // create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         create_info.queueFamilyIndex = graphics_queue_family;
 
         VK_CHECK(vkCreateCommandPool(vk_device, &create_info, nullptr, &vk_command_pool));
@@ -709,8 +719,6 @@ void Device::destroy_context(ContextHandle context)
     if (!context_impl)
         return;
 
-    VK_CHECK(vkWaitForFences(m_impl->vk_device, 1, &context_impl->vk_fence, VK_TRUE, 1000000000));
-
     vkDestroyFence(m_impl->vk_device, context_impl->vk_fence, nullptr);
     vkFreeCommandBuffers(m_impl->vk_device, m_impl->vk_command_pool, 1, &context_impl->vk_command_buffer);
 
@@ -729,6 +737,8 @@ void Device::begin(ContextHandle context)
     begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
     VK_CHECK(vkBeginCommandBuffer(context_impl->vk_command_buffer, &begin_info));
+
+    VK_CHECK(vkResetFences(m_impl->vk_device, 1, &context_impl->vk_fence));
 
     context_impl->is_recording = true;
 }
@@ -753,6 +763,19 @@ void Device::wait(ContextHandle context)
     ContextImpl *context_impl = m_impl->contexts[context];
     if (!context_impl)
         return;
+
+    VK_CHECK(vkWaitForFences(m_impl->vk_device, 1, &context_impl->vk_fence, VK_TRUE, 1000000000));
+
+    // release transient resources
+    for (const ResourceHandle &resource : context_impl->transient_resources) {
+        // TODO use visitor
+        if (auto buffer = std::get<BufferHandle>(resource))
+            destroy_buffer(buffer);
+        else if (auto image = std::get<ImageHandle>(resource))
+            destroy_image(image);
+        else if (auto sampler = std::get<SamplerHandle>(resource))
+            destroy_sampler(sampler);
+    }
 }
 
 void Device::write_buffer(ContextHandle context, BufferHandle buffer, const void *data, size_t size, size_t offset)
@@ -840,6 +863,43 @@ void Device::copy_buffer(ContextHandle context, BufferHandle src, BufferHandle d
     buffer_copy.size = size;
 
     vkCmdCopyBuffer(context_impl->vk_command_buffer, src_impl->vk_buffer, dst_impl->vk_buffer, 1, &buffer_copy);
+}
+
+// copy_image
+
+void Device::dispatch(ContextHandle context, DispatchDesc desc)
+{
+    ContextImpl *context_impl = m_impl->contexts[context];
+    PipelineImpl *pipeline_impl = m_impl->pipelines[desc.pipeline];
+    if (!context_impl || !pipeline_impl)
+        return;
+
+    VkDescriptorSetAllocateInfo allocate_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocate_info.descriptorPool = m_impl->vk_descriptor_pool;
+    allocate_info.descriptorSetCount = 1;
+    allocate_info.pSetLayouts = &pipeline_impl->vk_descriptor_set_layout;
+
+    VkDescriptorSet vk_descriptor_set;
+    VK_CHECK(vkAllocateDescriptorSets(m_impl->vk_device, &allocate_info, &vk_descriptor_set));
+
+
+
+
+    vkCmdBindPipeline(context_impl->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_impl->vk_pipeline);
+    vkCmdBindDescriptorSets(context_impl->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipeline_impl->vk_pipeline_layout, 0, 1, &vk_descriptor_set, 0, nullptr);
+
+    if (desc.push_constants_size > 0) {
+        FR_ASSERT(desc.push_constants);
+        vkCmdPushConstants(context_impl->vk_command_buffer, pipeline_impl->vk_pipeline_layout,
+                           VK_SHADER_STAGE_COMPUTE_BIT, 0, desc.push_constants_size, desc.push_constants);
+    }
+
+    vkCmdDispatch(context_impl->vk_command_buffer, desc.group_count[0], desc.group_count[1], desc.group_count[2]);
+
+
+    // TODO
+    // VK_CHECK(vkFreeDescriptorSets(m_impl->vk_device, m_impl->vk_descriptor_pool, 1, &vk_descriptor_set));
 }
 
 FR_NAMESPACE_END

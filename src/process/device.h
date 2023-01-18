@@ -48,10 +48,10 @@ enum class ImageFormat : uint32_t {
 enum class ResourceUsage : uint32_t {
     Unknown = (1 << 0),
     ConstantBuffer = (1 << 1),
-    UnorderedAccess = (1 << 4),
-    ShaderResource = (1 << 5),
-    TransferDst = (1 << 7),
-    TransferSrc = (1 << 8),
+    UnorderedAccess = (1 << 2),
+    ShaderResource = (1 << 3),
+    TransferDst = (1 << 4),
+    TransferSrc = (1 << 5),
 };
 FR_ENUM_FLAG_OPERATORS(ResourceUsage)
 
@@ -165,6 +165,7 @@ struct DispatchDesc {
     } bindings[4];
     const void *push_constants;
     uint32_t push_constants_size;
+    uint32_t group_count[3];
 };
 
 class Device {

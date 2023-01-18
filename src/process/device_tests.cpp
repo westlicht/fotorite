@@ -51,25 +51,30 @@ TEST_CASE("compute" * doctest::skip(FOTORITE_GITHUB_CI))
     std::vector<float> buffer1_data(N);
     std::vector<float> result_data(N);
 
+    for (size_t i = 0; i < N; ++i) {
+        buffer0_data[i] = i;
+        buffer1_data[i] = i * 10;
+    }
+
     Device device({
         .enable_validation_layers = true,
     });
 
     BufferHandle buffer0 = device.create_buffer({
         .size = N * sizeof(float),
-        .usage = ResourceUsage::ShaderResource,
+        .usage = ResourceUsage::ShaderResource | ResourceUsage::TransferSrc | ResourceUsage::TransferDst,
         .memory = MemoryType::Device,
     });
 
     BufferHandle buffer1 = device.create_buffer({
         .size = N * sizeof(float),
-        .usage = ResourceUsage::ShaderResource,
+        .usage = ResourceUsage::ShaderResource | ResourceUsage::TransferSrc | ResourceUsage::TransferDst,
         .memory = MemoryType::Device,
     });
 
     BufferHandle result = device.create_buffer({
         .size = N * sizeof(float),
-        .usage = ResourceUsage::UnorderedAccess,
+        .usage = ResourceUsage::UnorderedAccess | ResourceUsage::TransferSrc | ResourceUsage::TransferDst,
         .memory = MemoryType::Device,
     });
 
@@ -90,29 +95,36 @@ TEST_CASE("compute" * doctest::skip(FOTORITE_GITHUB_CI))
     });
 
     ContextHandle context = device.create_context();
+#if 0
     device.begin(context);
+    device.write_buffer(context, buffer0, buffer0_data.data(), N * sizeof(float));
     device.copy_buffer(context, buffer0, buffer1, N * sizeof(float));
     device.copy_buffer(context, buffer1, result, N * sizeof(float));
+    device.read_buffer(context, buffer1, buffer1_data.data(), N * sizeof(float));
     device.submit(context);
     device.wait(context);
-#if 0
-    device.write_buffer(sequence, buffer0, buffer0_data.data(), N * sizeof(float));
-    device.write_buffer(sequence, buffer1, buffer1_data.data(), N * sizeof(float));
+#else
+    device.begin(context);
+    device.write_buffer(context, buffer0, buffer0_data.data(), N * sizeof(float));
+    device.write_buffer(context, buffer1, buffer1_data.data(), N * sizeof(float));
 
     uint32_t push_constants = N;
-    device.dispatch({
-        .pipeline = pipeline,
-        .bindings{
-            {.binding = 0, .resource = buffer0},
-            {.binding = 1, .resource = buffer1},
-            {.binding = 2, .resource = result},
-        },
-        .push_constants = &push_constants,
-        .push_constants_size = sizeof(push_constants),
-    });
+    device.dispatch(context, {
+                                 .pipeline = pipeline,
+                                 .bindings{
+                                     {.binding = 0, .resource = buffer0},
+                                     {.binding = 1, .resource = buffer1},
+                                     {.binding = 2, .resource = result},
+                                 },
+                                 .push_constants = &push_constants,
+                                 .push_constants_size = sizeof(push_constants),
+                             });
 
-    device.read_buffer(sequence, result, result_data.data(), N * sizeof(float));
+    device.read_buffer(context, result, result_data.data(), N * sizeof(float));
+    device.submit(context);
+    device.wait(context);
 #endif
+
     device.destroy_context(context);
 
     device.destroy_pipeline(pipeline);
