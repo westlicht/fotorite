@@ -146,8 +146,7 @@ struct SamplerDesc {
     SamplerAddressMode address_mode_w = SamplerAddressMode::Repeat;
 };
 
-struct BindingLayoutItem
-{
+struct BindingLayoutItem {
     uint32_t binding{0};
     DescriptorType type{DescriptorType::Unknown};
     uint32_t count{1};
@@ -155,8 +154,7 @@ struct BindingLayoutItem
 
 using BindingLayout = std::vector<BindingLayoutItem>;
 
-struct BindingItem
-{
+struct BindingItem {
     uint32_t binding{0};
     ResourceHandle resource;
 };
@@ -206,10 +204,12 @@ public:
 
     void write_buffer(ContextHandle context, BufferHandle buffer, const void *data, size_t size, size_t offset = 0);
     void read_buffer(ContextHandle context, BufferHandle buffer, void *data, size_t size, size_t offset = 0);
-
     void copy_buffer(ContextHandle context, BufferHandle src, BufferHandle dst, size_t size, size_t src_offset = 0,
                      size_t dst_offset = 0);
-    void copy_image(ContextHandle context);
+
+    void write_image(ContextHandle context, ImageHandle image, const void *data, size_t size);
+    void read_image(ContextHandle context, ImageHandle image, void *data, size_t size);
+    void copy_image(ContextHandle context, ImageHandle src, ImageHandle dst, uint32_t width, uint32_t height);
 
     void dispatch(ContextHandle context, DispatchDesc desc);
 

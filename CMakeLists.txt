@@ -67,7 +67,8 @@ set(SHADER_SRC_DIR ${PROJECT_SOURCE_DIR}/src/shaders)
 set(SHADER_BIN_DIR ${PROJECT_BINARY_DIR}/shaders)
 
 set(shaders
-    test.cs.hlsl
+    test_buffer.cs.hlsl
+    test_image.cs.hlsl
 )
 
 foreach(shader ${shaders})

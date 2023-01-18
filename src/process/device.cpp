@@ -231,6 +231,7 @@ struct BufferImpl {
 struct ImageImpl {
     ImageDesc desc;
     ResourceState state;
+    VkDeviceMemory vk_device_memory;
     VkImage vk_image;
 };
 
@@ -505,6 +506,33 @@ inline void transition_state(DeviceImpl &device, ContextImpl &context, BufferImp
                          &buffer_memory_barrier, 0, nullptr);
 }
 
+inline void transition_state(DeviceImpl &device, ContextImpl &context, ImageImpl &image, ResourceState new_state)
+{
+    ResourceState old_state = image.state;
+    image.state = new_state;
+
+    const ResourceStateInfo &old_info = RESOURCE_STATE_MAP[static_cast<size_t>(old_state)];
+    const ResourceStateInfo &new_info = RESOURCE_STATE_MAP[static_cast<size_t>(new_state)];
+
+    VkImageMemoryBarrier image_memory_barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    image_memory_barrier.srcAccessMask = old_info.access;
+    image_memory_barrier.dstAccessMask = new_info.access;
+    image_memory_barrier.oldLayout = old_info.layout;
+    image_memory_barrier.newLayout = new_info.layout;
+    image_memory_barrier.srcQueueFamilyIndex = device.graphics_queue_family;
+    image_memory_barrier.dstQueueFamilyIndex = device.graphics_queue_family;
+    image_memory_barrier.image = image.vk_image;
+    image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_memory_barrier.subresourceRange.baseMipLevel = 0;
+    image_memory_barrier.subresourceRange.levelCount = 1;
+    image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+    image_memory_barrier.subresourceRange.layerCount = 1;
+
+    vkCmdPipelineBarrier(context.vk_command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VkDependencyFlags(0), 0, nullptr, 0, nullptr, 1,
+                         &image_memory_barrier);
+}
+
 inline VkDescriptorSet create_descriptor_set(DeviceImpl &device, ContextImpl &context, PipelineImpl &pipeline,
                                              const BindingSet &binding_set)
 {
@@ -534,8 +562,8 @@ inline VkDescriptorSet create_descriptor_set(DeviceImpl &device, ContextImpl &co
         write.dstArrayElement = 0;
         write.descriptorCount = 1;
 
-        if (auto buffer = std::get<BufferHandle>(set_item.resource)) {
-            BufferImpl *buffer_impl = device.buffers[buffer];
+        if (auto buffer = std::get_if<BufferHandle>(&set_item.resource)) {
+            BufferImpl *buffer_impl = device.buffers[*buffer];
             FR_ASSERT(buffer_impl);
 
             write.descriptorType = DESCRIPTOR_TYPE_MAP[static_cast<size_t>(layout_item.type)].type;
@@ -561,10 +589,43 @@ inline VkDescriptorSet create_descriptor_set(DeviceImpl &device, ContextImpl &co
                 default:
                     FR_ASSERT(false);
             }
-        } else if (auto image = std::get<ImageHandle>(set_item.resource)) {
-            // TODO
-        } else if (auto sampler = std::get<SamplerHandle>(set_item.resource)) {
-            SamplerImpl *sampler_impl = device.samplers[sampler];
+        } else if (auto image = std::get_if<ImageHandle>(&set_item.resource)) {
+            ImageImpl *image_impl = device.images[*image];
+            FR_ASSERT(image_impl);
+
+            write.descriptorType = DESCRIPTOR_TYPE_MAP[static_cast<size_t>(layout_item.type)].type;
+
+            switch (layout_item.type) {
+                case DescriptorType::Texture:
+                case DescriptorType::RWTexture: {
+                    VkImageViewCreateInfo create_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+                    create_info.image = image_impl->vk_image;
+                    create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+                    create_info.format = IMAGE_FORMAT_MAP[static_cast<size_t>(image_impl->desc.format)];
+                    create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    create_info.subresourceRange.baseMipLevel = 0;
+                    create_info.subresourceRange.levelCount = 1;
+                    create_info.subresourceRange.baseArrayLayer = 0;
+                    create_info.subresourceRange.layerCount = 1;
+                    VkImageView vk_image_view;
+                    VK_CHECK(vkCreateImageView(device.vk_device, &create_info, nullptr, &vk_image_view));
+                    descriptor_set.vk_image_views.push_back(vk_image_view);
+
+                    image_info.imageLayout = DESCRIPTOR_TYPE_MAP[static_cast<size_t>(layout_item.type)].layout;
+                    image_info.imageView = vk_image_view;
+                    image_info.sampler = VK_NULL_HANDLE;
+                    write.pImageInfo = &image_info;
+                    break;
+                }
+                default:
+                    FR_ASSERT(false);
+            }
+        } else if (auto sampler = std::get_if<SamplerHandle>(&set_item.resource)) {
+            SamplerImpl *sampler_impl = device.samplers[*sampler];
             FR_ASSERT(sampler);
             image_info.sampler = sampler_impl->vk_sampler;
             write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -582,6 +643,11 @@ inline VkDescriptorSet create_descriptor_set(DeviceImpl &device, ContextImpl &co
 inline void destroy_descriptor_set(DeviceImpl &device, DescriptorSet &descriptor_set)
 {
     VK_CHECK(vkFreeDescriptorSets(device.vk_device, device.vk_descriptor_pool, 1, &descriptor_set.vk_descriptor_set));
+
+    for (VkImageView vk_image_view : descriptor_set.vk_image_views)
+        vkDestroyImageView(device.vk_device, vk_image_view, nullptr);
+    for (VkBufferView vk_buffer_view : descriptor_set.vk_buffer_views)
+        vkDestroyBufferView(device.vk_device, vk_buffer_view, nullptr);
 }
 
 Device::Device(const DeviceDesc &desc) { m_impl = std::make_unique<DeviceImpl>(desc); }
@@ -669,6 +735,32 @@ ImageHandle Device::create_image(const ImageDesc &desc)
 
     ResourceUsageInfo usage_info = get_resource_usage_info(desc.usage);
 
+    VkImageCreateInfo create_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    create_info.imageType = VK_IMAGE_TYPE_2D;
+    create_info.format = IMAGE_FORMAT_MAP[static_cast<size_t>(desc.format)];
+    create_info.mipLevels = 1;
+    create_info.arrayLayers = 1;
+    create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    // TODO: this is a crude way to allow reading image data on the host
+    create_info.tiling = desc.memory == MemoryType::Device ? VK_IMAGE_TILING_OPTIMAL : VK_IMAGE_TILING_LINEAR;
+    create_info.usage = usage_info.image_usage;
+    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.queueFamilyIndexCount = 1;
+    create_info.pQueueFamilyIndices = &m_impl->graphics_queue_family;
+    create_info.extent = {desc.width, desc.height, 1};
+    create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VK_CHECK(vkCreateImage(m_impl->vk_device, &create_info, nullptr, &image_impl->vk_image));
+
+    VkMemoryRequirements memory_requirements;
+    vkGetImageMemoryRequirements(m_impl->vk_device, image_impl->vk_image, &memory_requirements);
+
+    VkMemoryAllocateInfo allocate_info{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocate_info.allocationSize = memory_requirements.size;
+    allocate_info.memoryTypeIndex = m_impl->find_memory_type(memory_requirements.memoryTypeBits, desc.memory);
+    VK_CHECK(vkAllocateMemory(m_impl->vk_device, &allocate_info, nullptr, &image_impl->vk_device_memory));
+    VK_CHECK(vkBindImageMemory(m_impl->vk_device, image_impl->vk_image, image_impl->vk_device_memory, 0));
+
     return image;
 }
 
@@ -678,6 +770,8 @@ void Device::destroy_image(ImageHandle image)
     if (!image_impl)
         return;
 
+    vkDestroyImage(m_impl->vk_device, image_impl->vk_image, nullptr);
+    vkFreeMemory(m_impl->vk_device, image_impl->vk_device_memory, nullptr);
     m_impl->images.free(image);
 }
 
@@ -864,12 +958,12 @@ void Device::wait(ContextHandle context)
     // release transient resources
     for (const ResourceHandle &resource : context_impl->transient_resources) {
         // TODO use visitor
-        if (auto buffer = std::get<BufferHandle>(resource))
-            destroy_buffer(buffer);
-        else if (auto image = std::get<ImageHandle>(resource))
-            destroy_image(image);
-        else if (auto sampler = std::get<SamplerHandle>(resource))
-            destroy_sampler(sampler);
+        if (auto buffer = std::get_if<BufferHandle>(&resource))
+            destroy_buffer(*buffer);
+        else if (auto image = std::get_if<ImageHandle>(&resource))
+            destroy_image(*image);
+        else if (auto sampler = std::get_if<SamplerHandle>(&resource))
+            destroy_sampler(*sampler);
     }
 
     // release descriptor sets
@@ -899,6 +993,10 @@ void Device::write_buffer(ContextHandle context, BufferHandle buffer, const void
             .usage = ResourceUsage::TransferSrc,
             .memory = MemoryType::Host,
         });
+
+        // TODO make stable pointer pools (pointer might be invalid after creating staging resource)
+        buffer_impl = m_impl->buffers[buffer];
+
         write_buffer(context, staging_buffer, data, size);
 
         submit(context);
@@ -932,6 +1030,10 @@ void Device::read_buffer(ContextHandle context, BufferHandle buffer, void *data,
             .usage = ResourceUsage::TransferDst,
             .memory = MemoryType::Host,
         });
+
+        // TODO make stable pointer pools (pointer might be invalid after creating staging resource)
+        buffer_impl = m_impl->buffers[buffer];
+
         copy_buffer(context, buffer, staging_buffer, size, offset, 0);
 
         submit(context);
@@ -965,7 +1067,108 @@ void Device::copy_buffer(ContextHandle context, BufferHandle src, BufferHandle d
     vkCmdCopyBuffer(context_impl->vk_command_buffer, src_impl->vk_buffer, dst_impl->vk_buffer, 1, &buffer_copy);
 }
 
-// copy_image
+void Device::write_image(ContextHandle context, ImageHandle image, const void *data, size_t size)
+{
+    ContextImpl *context_impl = m_impl->contexts[context];
+    ImageImpl *image_impl = m_impl->images[image];
+    if (!context_impl || !image_impl || size == 0)
+        return;
+
+    FR_ASSERT(data);
+
+    if (image_impl->desc.memory == MemoryType::Host) {
+        void *buffer_data;
+        VK_CHECK(vkMapMemory(m_impl->vk_device, image_impl->vk_device_memory, 0, size, 0, &buffer_data));
+        std::memcpy(buffer_data, data, size);
+        vkUnmapMemory(m_impl->vk_device, image_impl->vk_device_memory);
+    } else if (image_impl->desc.memory == MemoryType::Device) {
+        // create staging image
+        ImageHandle staging_image = create_image({
+            .width = image_impl->desc.width,
+            .height = image_impl->desc.height,
+            .format = image_impl->desc.format,
+            .usage = ResourceUsage::TransferSrc,
+            .memory = MemoryType::Host,
+        });
+
+        // TODO make stable pointer pools (pointer might be invalid after creating staging resource)
+        image_impl = m_impl->images[image];
+
+        write_image(context, staging_image, data, size);
+
+        submit(context);
+        wait(context);
+        begin(context);
+
+        copy_image(context, staging_image, image, image_impl->desc.width, image_impl->desc.height);
+
+        context_impl->transient_resources.push_back(staging_image);
+    }
+}
+
+void Device::read_image(ContextHandle context, ImageHandle image, void *data, size_t size)
+{
+    ContextImpl *context_impl = m_impl->contexts[context];
+    ImageImpl *image_impl = m_impl->images[image];
+    if (!context_impl || !image_impl || size == 0)
+        return;
+
+    FR_ASSERT(data);
+
+    if (image_impl->desc.memory == MemoryType::Host) {
+        void *buffer_data;
+        VK_CHECK(vkMapMemory(m_impl->vk_device, image_impl->vk_device_memory, 0, size, 0, &buffer_data));
+        std::memcpy(data, buffer_data, size);
+        vkUnmapMemory(m_impl->vk_device, image_impl->vk_device_memory);
+    } else if (image_impl->desc.memory == MemoryType::Device) {
+        // create staging image
+        ImageHandle staging_image = create_image({
+            .width = image_impl->desc.width,
+            .height = image_impl->desc.height,
+            .format = image_impl->desc.format,
+            .usage = ResourceUsage::TransferDst,
+            .memory = MemoryType::Host,
+        });
+
+        // TODO make stable pointer pools (pointer might be invalid after creating staging resource)
+        image_impl = m_impl->images[image];
+
+        copy_image(context, image, staging_image, image_impl->desc.width, image_impl->desc.height);
+
+        submit(context);
+        wait(context);
+        begin(context);
+
+        read_image(context, staging_image, data, size);
+
+        context_impl->transient_resources.push_back(staging_image);
+    }
+}
+
+void Device::copy_image(ContextHandle context, ImageHandle src, ImageHandle dst, uint32_t width, uint32_t height)
+{
+    ContextImpl *context_impl = m_impl->contexts[context];
+    ImageImpl *src_impl = m_impl->images[src];
+    ImageImpl *dst_impl = m_impl->images[dst];
+
+    if (!context_impl || !src_impl || !dst_impl || width == 0 || height == 0)
+        return;
+
+    transition_state(*m_impl, *context_impl, *src_impl, ResourceState::TransferSrc);
+    transition_state(*m_impl, *context_impl, *dst_impl, ResourceState::TransferDst);
+
+    VkImageCopy image_copy{};
+    image_copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_copy.srcSubresource.layerCount = 1;
+    image_copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_copy.dstSubresource.layerCount = 1;
+    image_copy.extent.width = width;
+    image_copy.extent.height = height;
+    image_copy.extent.depth = 1;
+
+    vkCmdCopyImage(context_impl->vk_command_buffer, src_impl->vk_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   dst_impl->vk_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &image_copy);
+}
 
 void Device::dispatch(ContextHandle context, DispatchDesc desc)
 {
@@ -984,9 +1187,9 @@ void Device::dispatch(ContextHandle context, DispatchDesc desc)
 
         FR_ASSERT(set_item.binding == layout_item.binding);
 
-        if (auto buffer = std::get<BufferHandle>(set_item.resource)) {
-            BufferImpl *buffer_impl = m_impl->buffers[buffer];
-            FR_ASSERT(buffer);
+        if (auto buffer = std::get_if<BufferHandle>(&set_item.resource)) {
+            BufferImpl *buffer_impl = m_impl->buffers[*buffer];
+            FR_ASSERT(buffer_impl);
 
             switch (layout_item.type) {
                 case DescriptorType::ConstantBuffer:
@@ -994,13 +1197,25 @@ void Device::dispatch(ContextHandle context, DispatchDesc desc)
                     break;
                 case DescriptorType::StructuredBuffer:
                 case DescriptorType::Buffer:
-                case DescriptorType::Texture:
                     transition_state(*m_impl, *context_impl, *buffer_impl, ResourceState::ShaderResource);
                     break;
                 case DescriptorType::RWStructuredBuffer:
                 case DescriptorType::RWBuffer:
-                case DescriptorType::RWTexture:
                     transition_state(*m_impl, *context_impl, *buffer_impl, ResourceState::UnorderedAccess);
+                    break;
+                default:
+                    FR_ASSERT(false);
+            }
+        } else if (auto image = std::get_if<ImageHandle>(&set_item.resource)) {
+            ImageImpl *image_impl = m_impl->images[*image];
+            FR_ASSERT(image_impl);
+
+            switch (layout_item.type) {
+                case DescriptorType::Texture:
+                    transition_state(*m_impl, *context_impl, *image_impl, ResourceState::ShaderResource);
+                    break;
+                case DescriptorType::RWTexture:
+                    transition_state(*m_impl, *context_impl, *image_impl, ResourceState::UnorderedAccess);
                     break;
                 default:
                     FR_ASSERT(false);
