@@ -62,6 +62,7 @@ endif()
 # shaders
 # -----------------------------------------------------------------------------
 
+set(DXC_FLAGS -spirv -fspv-target-env=vulkan1.2 -fvk-use-dx-layout)
 set(SHADER_SRC_DIR ${PROJECT_SOURCE_DIR}/src/shaders)
 set(SHADER_BIN_DIR ${PROJECT_BINARY_DIR}/shaders)
 
@@ -73,18 +74,18 @@ foreach(shader ${shaders})
     get_filename_component(name ${shader} NAME_WLE)
     string(MAKE_C_IDENTIFIER ${name} cid)
     set(source_file ${SHADER_SRC_DIR}/${shader})
-    set(spirv_file ${SHADER_BIN_DIR}/${name}.spv)
     set(header_file ${SHADER_BIN_DIR}/${cid}.h)
+    set(spirv_file ${SHADER_BIN_DIR}/${name}.spv)
     add_custom_command(
-        OUTPUT ${spirv_file}
+        OUTPUT ${header_file}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/shaders/"
-        COMMAND ${DXC} -I ${SHADER_SRC_DIR} -T cs_6_0 -spirv -Fo ${spirv_file} -Vn ${cid} -Fh ${header_file} ${source_file}
+        COMMAND ${DXC} ${DXC_FLAGS} -I ${SHADER_SRC_DIR} -T cs_6_0 -Fo ${spirv_file} -Vn ${cid} -Fh ${header_file} ${source_file}
         DEPENDS ${source_file}
     )
-    list(APPEND spirv_files ${spirv_file})
+    list(APPEND header_files ${header_file})
 endforeach()
 
-add_custom_target(shaders DEPENDS ${spirv_files})
+add_custom_target(shaders DEPENDS ${header_files})
 
 # -----------------------------------------------------------------------------
 # core library

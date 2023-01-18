@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdexcept>  // TODO remove
+
 // OS defines
 #if defined(__WIN32__) || defined(_MSC_VER)
 #define FR_WINDOWS 1
@@ -22,7 +24,11 @@
 #define FR_NAMESPACE_BEGIN namespace fr {
 #define FR_NAMESPACE_END }
 
-#define FR_ASSERT(c)
+#define FR_ASSERT(c)                            \
+    {                                           \
+        if (!(c))                               \
+            throw std::runtime_error("assert"); \
+    }
 
 #define FR_ENUM_FLAG_OPERATORS(T)                                                                                \
     static_assert(sizeof(T) == sizeof(uint32_t));                                                                \

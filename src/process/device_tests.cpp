@@ -86,10 +86,10 @@ TEST_CASE("compute" * doctest::skip(FOTORITE_GITHUB_CI))
 
     PipelineHandle pipeline = device.create_pipeline({
         .shader = shader,
-        .bindings{
-            {.binding = 0, .type = DescriptorType::Buffer},
-            {.binding = 1, .type = DescriptorType::Buffer},
-            {.binding = 2, .type = DescriptorType::RWBuffer},
+        .binding_layout{
+            {.binding = 0, .type = DescriptorType::StructuredBuffer},
+            {.binding = 1, .type = DescriptorType::StructuredBuffer},
+            {.binding = 2, .type = DescriptorType::RWStructuredBuffer},
         },
         .push_constants_size = 4,
     });
@@ -111,13 +111,14 @@ TEST_CASE("compute" * doctest::skip(FOTORITE_GITHUB_CI))
     uint32_t push_constants = N;
     device.dispatch(context, {
                                  .pipeline = pipeline,
-                                 .bindings{
+                                 .binding_set{
                                      {.binding = 0, .resource = buffer0},
                                      {.binding = 1, .resource = buffer1},
                                      {.binding = 2, .resource = result},
                                  },
                                  .push_constants = &push_constants,
                                  .push_constants_size = sizeof(push_constants),
+                                 .group_count{N / 256, 1, 1},
                              });
 
     device.read_buffer(context, result, result_data.data(), N * sizeof(float));

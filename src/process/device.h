@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <variant>
+#include <vector>
 
 FR_NAMESPACE_BEGIN
 
@@ -145,24 +146,32 @@ struct SamplerDesc {
     SamplerAddressMode address_mode_w = SamplerAddressMode::Repeat;
 };
 
-struct PipelineDesc {
-    static const uint32_t INVALID_BINDING = static_cast<uint32_t>(-1);
+struct BindingLayoutItem
+{
+    uint32_t binding{0};
+    DescriptorType type{DescriptorType::Unknown};
+    uint32_t count{1};
+};
 
+using BindingLayout = std::vector<BindingLayoutItem>;
+
+struct BindingItem
+{
+    uint32_t binding{0};
+    ResourceHandle resource;
+};
+
+using BindingSet = std::vector<BindingItem>;
+
+struct PipelineDesc {
     ShaderHandle shader{ShaderHandle::null()};
-    struct {
-        uint32_t binding{INVALID_BINDING};
-        DescriptorType type{DescriptorType::Unknown};
-        uint32_t count{1};
-    } bindings[4];
+    BindingLayout binding_layout;
     uint32_t push_constants_size = 0;
 };
 
 struct DispatchDesc {
     PipelineHandle pipeline;
-    struct {
-        uint32_t binding{0};
-        ResourceHandle resource;
-    } bindings[4];
+    BindingSet binding_set;
     const void *push_constants;
     uint32_t push_constants_size;
     uint32_t group_count[3];

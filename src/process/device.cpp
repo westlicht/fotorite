@@ -99,17 +99,17 @@ struct ResourceUsageInfo {
 };
 
 const ResourceUsageInfo RESOURCE_USAGE_MAP[] = {
-    // Unknown
+    // ResourceUsage::Unknown
     {0, 0},
-    // ConstantBuffer
+    // ResourceUsage::ConstantBuffer
     {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 0},
-    // UnorderedAccess
+    // ResourceUsage::UnorderedAccess
     {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT, VK_IMAGE_USAGE_STORAGE_BIT},
-    // ShaderResource
+    // ResourceUsage::ShaderResource
     {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT, VK_IMAGE_USAGE_SAMPLED_BIT},
-    // TransferDst
+    // ResourceUsage::TransferDst
     {VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_IMAGE_USAGE_TRANSFER_DST_BIT},
-    // TransferSrc
+    // ResourceUsage::TransferSrc
     {VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT},
 };
 
@@ -246,6 +246,13 @@ struct PipelineImpl {
     VkPipeline vk_pipeline;
 };
 
+struct DescriptorSet {
+    VkDescriptorSet vk_descriptor_set;
+
+    std::vector<VkImageView> vk_image_views;
+    std::vector<VkBufferView> vk_buffer_views;
+};
+
 struct ContextImpl {
     VkCommandBuffer vk_command_buffer;
     VkFence vk_fence;
@@ -253,6 +260,8 @@ struct ContextImpl {
     bool is_recording;
 
     std::vector<ResourceHandle> transient_resources;
+
+    std::vector<DescriptorSet> descriptor_sets;
 };
 
 struct DeviceImpl {
@@ -309,6 +318,10 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
             spdlog::info("{}", layer.layerName);
             if (std::strcmp(layer.layerName, "VK_LAYER_KHRONOS_validation") == 0)
                 validation_layers.emplace_back("VK_LAYER_KHRONOS_validation");
+            // if (std::strcmp(layer.layerName, "VK_LAYER_KHRONOS_synchronization2") == 0)
+            //     validation_layers.emplace_back("VK_LAYER_KHRONOS_synchronization2");
+            // if (std::strcmp(layer.layerName, "VK_LAYER_LUNARG_api_dump") == 0)
+            //     validation_layers.emplace_back("VK_LAYER_LUNARG_api_dump");
         }
     }
 
@@ -436,7 +449,7 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
 
         VkDescriptorPoolCreateInfo create_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         create_info.flags =
-            VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT / VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+            VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
         create_info.maxSets = set_count;
         create_info.poolSizeCount = static_cast<uint32_t>(std::size(sizes));
         create_info.pPoolSizes = sizes;
@@ -490,6 +503,85 @@ inline void transition_state(DeviceImpl &device, ContextImpl &context, BufferImp
     vkCmdPipelineBarrier(context.vk_command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VkDependencyFlags(0), 0, nullptr, 1,
                          &buffer_memory_barrier, 0, nullptr);
+}
+
+inline VkDescriptorSet create_descriptor_set(DeviceImpl &device, ContextImpl &context, PipelineImpl &pipeline,
+                                             const BindingSet &binding_set)
+{
+    DescriptorSet descriptor_set;
+
+    FR_ASSERT(binding_set.size() == pipeline.desc.binding_layout.size());
+
+    VkDescriptorSetAllocateInfo allocate_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocate_info.descriptorPool = device.vk_descriptor_pool;
+    allocate_info.descriptorSetCount = 1;
+    allocate_info.pSetLayouts = &pipeline.vk_descriptor_set_layout;
+
+    VK_CHECK(vkAllocateDescriptorSets(device.vk_device, &allocate_info, &descriptor_set.vk_descriptor_set));
+
+    for (size_t i = 0; i < binding_set.size(); ++i) {
+        const auto &set_item = binding_set[i];
+        const auto &layout_item = pipeline.desc.binding_layout[i];
+
+        FR_ASSERT(set_item.binding == layout_item.binding);
+
+        VkDescriptorBufferInfo buffer_info{};
+        VkDescriptorImageInfo image_info{};
+
+        VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        write.dstSet = descriptor_set.vk_descriptor_set;
+        write.dstBinding = set_item.binding;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+
+        if (auto buffer = std::get<BufferHandle>(set_item.resource)) {
+            BufferImpl *buffer_impl = device.buffers[buffer];
+            FR_ASSERT(buffer_impl);
+
+            write.descriptorType = DESCRIPTOR_TYPE_MAP[static_cast<size_t>(layout_item.type)].type;
+
+            switch (layout_item.type) {
+                case DescriptorType::ConstantBuffer:
+                case DescriptorType::StructuredBuffer:
+                case DescriptorType::RWStructuredBuffer:
+                    buffer_info.buffer = buffer_impl->vk_buffer;
+                    buffer_info.offset = 0;
+                    buffer_info.range = VK_WHOLE_SIZE;
+                    write.pBufferInfo = &buffer_info;
+                    break;
+                case DescriptorType::Buffer:
+                case DescriptorType::RWBuffer: {
+                    FR_ASSERT(false);
+                    // auto view = new BufferView(buffer, format, offset, range);
+                    // _buffer_views.push_back(view);
+                    // buffer_view = view->vk_buffer_view();
+                    // write.pTexelBufferView = &buffer_view;
+                    break;
+                }
+                default:
+                    FR_ASSERT(false);
+            }
+        } else if (auto image = std::get<ImageHandle>(set_item.resource)) {
+            // TODO
+        } else if (auto sampler = std::get<SamplerHandle>(set_item.resource)) {
+            SamplerImpl *sampler_impl = device.samplers[sampler];
+            FR_ASSERT(sampler);
+            image_info.sampler = sampler_impl->vk_sampler;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+            write.pImageInfo = &image_info;
+        }
+
+        vkUpdateDescriptorSets(device.vk_device, 1, &write, 0, nullptr);
+    }
+
+    context.descriptor_sets.push_back(descriptor_set);
+
+    return descriptor_set.vk_descriptor_set;
+}
+
+inline void destroy_descriptor_set(DeviceImpl &device, DescriptorSet &descriptor_set)
+{
+    VK_CHECK(vkFreeDescriptorSets(device.vk_device, device.vk_descriptor_pool, 1, &descriptor_set.vk_descriptor_set));
 }
 
 Device::Device(const DeviceDesc &desc) { m_impl = std::make_unique<DeviceImpl>(desc); }
@@ -622,16 +714,16 @@ PipelineHandle Device::create_pipeline(const PipelineDesc &desc)
     PipelineHandle pipeline = m_impl->pipelines.alloc();
     PipelineImpl *pipeline_impl = m_impl->pipelines[pipeline];
 
+    pipeline_impl->desc = desc;
+
     std::vector<VkDescriptorSetLayoutBinding> bindings;
-    for (const auto &b : desc.bindings) {
-        if (b.binding == PipelineDesc::INVALID_BINDING)
-            continue;
-        FR_ASSERT(b.type != DescriptorType::Unknown);
-        FR_ASSERT(b.count >= 1);
+    for (const auto &item : desc.binding_layout) {
+        FR_ASSERT(item.type != DescriptorType::Unknown);
+        FR_ASSERT(item.count >= 1);
         VkDescriptorSetLayoutBinding binding = {};
-        binding.binding = b.binding;
-        binding.descriptorType = DESCRIPTOR_TYPE_MAP[static_cast<size_t>(b.type)].type;
-        binding.descriptorCount = b.count;
+        binding.binding = item.binding;
+        binding.descriptorType = DESCRIPTOR_TYPE_MAP[static_cast<size_t>(item.type)].type;
+        binding.descriptorCount = item.count;
         binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         bindings.push_back(binding);
     }
@@ -757,7 +849,10 @@ void Device::submit(ContextHandle context)
     submit_info.pCommandBuffers = &context_impl->vk_command_buffer;
 
     VK_CHECK(vkQueueSubmit(m_impl->vk_queue, 1, &submit_info, context_impl->vk_fence));
+
+    context_impl->is_recording = false;
 }
+
 void Device::wait(ContextHandle context)
 {
     ContextImpl *context_impl = m_impl->contexts[context];
@@ -776,6 +871,11 @@ void Device::wait(ContextHandle context)
         else if (auto sampler = std::get<SamplerHandle>(resource))
             destroy_sampler(sampler);
     }
+
+    // release descriptor sets
+    for (DescriptorSet &descriptor_set : context_impl->descriptor_sets)
+        destroy_descriptor_set(*m_impl, descriptor_set);
+    context_impl->descriptor_sets.clear();
 }
 
 void Device::write_buffer(ContextHandle context, BufferHandle buffer, const void *data, size_t size, size_t offset)
@@ -874,16 +974,41 @@ void Device::dispatch(ContextHandle context, DispatchDesc desc)
     if (!context_impl || !pipeline_impl)
         return;
 
-    VkDescriptorSetAllocateInfo allocate_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-    allocate_info.descriptorPool = m_impl->vk_descriptor_pool;
-    allocate_info.descriptorSetCount = 1;
-    allocate_info.pSetLayouts = &pipeline_impl->vk_descriptor_set_layout;
+    FR_ASSERT(desc.group_count[0] > 0 && desc.group_count[1] > 0 && desc.group_count[2] > 0);
 
-    VkDescriptorSet vk_descriptor_set;
-    VK_CHECK(vkAllocateDescriptorSets(m_impl->vk_device, &allocate_info, &vk_descriptor_set));
+    // transition resource state
+    FR_ASSERT(desc.binding_set.size() == pipeline_impl->desc.binding_layout.size());
+    for (size_t i = 0; i < desc.binding_set.size(); ++i) {
+        const auto &set_item = desc.binding_set[i];
+        const auto &layout_item = pipeline_impl->desc.binding_layout[i];
 
+        FR_ASSERT(set_item.binding == layout_item.binding);
 
+        if (auto buffer = std::get<BufferHandle>(set_item.resource)) {
+            BufferImpl *buffer_impl = m_impl->buffers[buffer];
+            FR_ASSERT(buffer);
 
+            switch (layout_item.type) {
+                case DescriptorType::ConstantBuffer:
+                    transition_state(*m_impl, *context_impl, *buffer_impl, ResourceState::ConstantBuffer);
+                    break;
+                case DescriptorType::StructuredBuffer:
+                case DescriptorType::Buffer:
+                case DescriptorType::Texture:
+                    transition_state(*m_impl, *context_impl, *buffer_impl, ResourceState::ShaderResource);
+                    break;
+                case DescriptorType::RWStructuredBuffer:
+                case DescriptorType::RWBuffer:
+                case DescriptorType::RWTexture:
+                    transition_state(*m_impl, *context_impl, *buffer_impl, ResourceState::UnorderedAccess);
+                    break;
+                default:
+                    FR_ASSERT(false);
+            }
+        }
+    }
+
+    VkDescriptorSet vk_descriptor_set = create_descriptor_set(*m_impl, *context_impl, *pipeline_impl, desc.binding_set);
 
     vkCmdBindPipeline(context_impl->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_impl->vk_pipeline);
     vkCmdBindDescriptorSets(context_impl->vk_command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -896,10 +1021,6 @@ void Device::dispatch(ContextHandle context, DispatchDesc desc)
     }
 
     vkCmdDispatch(context_impl->vk_command_buffer, desc.group_count[0], desc.group_count[1], desc.group_count[2]);
-
-
-    // TODO
-    // VK_CHECK(vkFreeDescriptorSets(m_impl->vk_device, m_impl->vk_descriptor_pool, 1, &vk_descriptor_set));
 }
 
 FR_NAMESPACE_END
