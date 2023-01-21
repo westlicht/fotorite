@@ -38,24 +38,23 @@ add_subdirectory(ext/nanogui)
 
 # dxc
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+    set(HAS_DXC ON)
     set(DXC_URL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.7.2212/dxc_2022_12_16.zip)
     set(DXC_REL_PATH bin/x64/dxc.exe)
 elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
-    set(DXC_URL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.7.2212/linux_dxc_2022_12_16.tar.gz)
-    set(DXC_REL_PATH bin/x64/dxc)
+    # set(DXC_URL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.7.2212/linux_dxc_2022_12_16.tar.gz)
+    # set(DXC_REL_PATH bin/x64/dxc)
 elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
-    set(DXC_URL http://westlicht.ch/macos_dxc_2021_07_08.zip)
-    set(DXC_REL_PATH bin/dxc)
+    # set(DXC_URL http://westlicht.ch/macos_dxc_2021_07_08.zip)
+    # set(DXC_REL_PATH bin/dxc)
 endif()
 
-include(FetchContent)
-FetchContent_Declare(dxc URL ${DXC_URL})
-FetchContent_MakeAvailable(dxc)
+if(HAS_DXC)
+    include(FetchContent)
+    FetchContent_Declare(dxc URL ${DXC_URL})
+    FetchContent_MakeAvailable(dxc)
 
-set(DXC ${dxc_SOURCE_DIR}/${DXC_REL_PATH})
-
-if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
-    file(CHMOD ${DXC} FILE_PERMISSIONS OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE)
+    set(DXC ${dxc_SOURCE_DIR}/${DXC_REL_PATH})
 endif()
 
 # -----------------------------------------------------------------------------
@@ -64,7 +63,6 @@ endif()
 
 set(DXC_FLAGS -spirv -fspv-target-env=vulkan1.2 -fvk-use-dx-layout)
 set(SHADER_SRC_DIR ${PROJECT_SOURCE_DIR}/src/shaders)
-set(SHADER_BIN_DIR ${PROJECT_BINARY_DIR}/shaders)
 
 set(shaders
     test_buffer.cs.hlsl
@@ -75,18 +73,25 @@ foreach(shader ${shaders})
     get_filename_component(name ${shader} NAME_WLE)
     string(MAKE_C_IDENTIFIER ${name} cid)
     set(source_file ${SHADER_SRC_DIR}/${shader})
-    set(header_file ${SHADER_BIN_DIR}/${cid}.h)
-    set(spirv_file ${SHADER_BIN_DIR}/${name}.spv)
-    add_custom_command(
-        OUTPUT ${header_file}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/shaders/"
-        COMMAND ${DXC} ${DXC_FLAGS} -I ${SHADER_SRC_DIR} -T cs_6_0 -Fo ${spirv_file} -Vn ${cid} -Fh ${header_file} ${source_file}
-        DEPENDS ${source_file}
-    )
-    list(APPEND header_files ${header_file})
+    set(header_file ${SHADER_SRC_DIR}/compiled/${cid}.h)
+    if(HAS_DXC)
+        add_custom_command(
+            OUTPUT ${header_file}
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/shaders/"
+            COMMAND ${DXC} ${DXC_FLAGS} -I ${SHADER_SRC_DIR} -T cs_6_0 -Vn ${cid} -Fh ${header_file} ${source_file}
+            DEPENDS ${source_file}
+            COMMENT "Compiling shader ${shader}"
+        )
+    endif()
+    list(APPEND shader_header_files ${header_file})
+    string(APPEND shader_includes "#include \"${cid}.h\"\n")
+    string(APPEND shader_names "${cid},\n")
 endforeach()
 
-add_custom_target(shaders DEPENDS ${header_files})
+file(CONFIGURE OUTPUT ${SHADER_SRC_DIR}/compiled/shader_includes.h CONTENT "${shader_includes}")
+file(CONFIGURE OUTPUT ${SHADER_SRC_DIR}/compiled/shader_names.h CONTENT "${shader_names}")
+
+add_custom_target(shaders DEPENDS ${shader_header_files})
 
 # -----------------------------------------------------------------------------
 # core library
@@ -108,7 +113,7 @@ target_sources(core PRIVATE
     src/ui/main_screen.cpp
     src/ui/panel.cpp
 )
-target_include_directories(core PUBLIC src PRIVATE ${JPEG_INCLUDE_DIR} ${SHADER_BIN_DIR})
+target_include_directories(core PUBLIC src PRIVATE ${JPEG_INCLUDE_DIR})
 target_compile_features(core PUBLIC cxx_std_20)
 target_compile_definitions(core PRIVATE _CRT_SECURE_NO_WARNINGS UNICODE)
 target_compile_options(core PUBLIC

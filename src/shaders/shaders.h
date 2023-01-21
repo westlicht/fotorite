@@ -9,8 +9,7 @@ FR_NAMESPACE_BEGIN
 using ShaderBlob = std::span<const unsigned char>;
 
 enum class ShaderID {
-    test_buffer_cs,
-    test_image_cs,
+#include "compiled/shader_names.h"
 };
 
 ShaderBlob get_shader_blob(ShaderID shader_id);

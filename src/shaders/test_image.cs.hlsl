@@ -5,7 +5,7 @@
     uint2 res;
 } constants;
 
-[numthreads(256, 1, 1)]
+[numthreads(32, 32, 1)]
 void main(uint3 thread_id : SV_DISPATCHTHREADID)
 {
     const uint2 pixel = thread_id.xy;

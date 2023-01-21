@@ -211,7 +211,7 @@ TEST_CASE("compute image" * doctest::skip(FOTORITE_GITHUB_CI))
                                  },
                                  .push_constants = &push_constants,
                                  .push_constants_size = sizeof(push_constants),
-                                 .group_count{N / 256, N / 256, 1},
+                                 .group_count{N / 32, N / 32, 1},
                              });
 
     device.read_image(context, dst_image, dst_image_data.data(), dst_image_data.size() * sizeof(float));
