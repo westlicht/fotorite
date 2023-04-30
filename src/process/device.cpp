@@ -2,6 +2,9 @@
 
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
+#if FR_MACOS
+#include <vulkan/vulkan_metal.h>
+#endif
 #include <volk.h>
 
 #include <spdlog/spdlog.h>
@@ -18,6 +21,13 @@
     }
 
 FR_NAMESPACE_BEGIN
+
+template <typename T, typename U>
+void append_create_info(T &t, U &u)
+{
+    u.pNext = t.pNext;
+    t.pNext = &u;
+}
 
 static const VkFormat IMAGE_FORMAT_MAP[] = {
     // ImageFormat::Unknown
@@ -332,6 +342,10 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
     std::vector<VkExtensionProperties> extensions(extension_count);
     VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, extensions.data()));
 
+    spdlog::info("Available extensions:");
+    for (const auto &extension : extensions)
+        spdlog::info("{}", extension.extensionName);
+
     VkApplicationInfo app_info{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     app_info.pApplicationName = "fotorite";
     app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -344,6 +358,9 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
     if (desc.enable_validation_layers) {
         required_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
+#if FR_MACOS
+    required_extensions.emplace_back(VK_EXT_METAL_OBJECTS_EXTENSION_NAME);
+#endif
 
     VkInstanceCreateInfo instance_info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     instance_info.pApplicationInfo = &app_info;
@@ -352,6 +369,12 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
     instance_info.ppEnabledExtensionNames = required_extensions.data();
     instance_info.enabledLayerCount = static_cast<uint32_t>(validation_layers.size());
     instance_info.ppEnabledLayerNames = validation_layers.data();
+
+#if FR_MACOS
+    VkExportMetalObjectCreateInfoEXT export_info{VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT};
+    export_info.exportObjectType = VK_EXPORT_METAL_OBJECT_TYPE_METAL_DEVICE_BIT_EXT;
+    append_create_info(instance_info, export_info);
+#endif
 
     VkDebugUtilsMessengerCreateInfoEXT debug_info{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
     if (desc.enable_validation_layers) {
@@ -362,7 +385,7 @@ DeviceImpl::DeviceImpl(const DeviceDesc &desc_) : desc(desc_)
                                  VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                                  VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         debug_info.pfnUserCallback = debug_callback;
-        instance_info.pNext = (VkDebugUtilsMessengerCreateInfoEXT *)&debug_info;
+        append_create_info(instance_info, debug_info);
     }
 
     VK_CHECK(vkCreateInstance(&instance_info, nullptr, &vk_instance));

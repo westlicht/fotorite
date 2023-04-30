@@ -97,6 +97,8 @@ add_custom_target(shaders DEPENDS ${shader_header_files})
 # core library
 # -----------------------------------------------------------------------------
 
+# string(APPEND CMAKE_CXX_FLAGS "-fsanitize=address -fno-omit-frame-pointer")
+
 add_library(core STATIC)
 target_sources(core PRIVATE
     src/core/core.cpp

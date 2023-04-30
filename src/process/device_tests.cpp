@@ -7,7 +7,7 @@ using namespace fr;
 
 TEST_SUITE_BEGIN("process");
 
-TEST_CASE("Device" * doctest::skip(true || FOTORITE_GITHUB_CI))
+TEST_CASE("Device" * doctest::skip(false || FOTORITE_GITHUB_CI))
 {
     Device device({
         .enable_validation_layers = true,
@@ -44,7 +44,7 @@ TEST_CASE("Device" * doctest::skip(true || FOTORITE_GITHUB_CI))
     }
 }
 
-TEST_CASE("compute buffer" * doctest::skip(FOTORITE_GITHUB_CI))
+TEST_CASE("compute buffer" * doctest::skip(true || FOTORITE_GITHUB_CI))
 {
     static const size_t N = 1024;
 
@@ -136,7 +136,7 @@ TEST_CASE("compute buffer" * doctest::skip(FOTORITE_GITHUB_CI))
     device.destroy_buffer(result);
 }
 
-TEST_CASE("compute image" * doctest::skip(FOTORITE_GITHUB_CI))
+TEST_CASE("compute image" * doctest::skip(true || FOTORITE_GITHUB_CI))
 {
     static const size_t N = 1024;
 

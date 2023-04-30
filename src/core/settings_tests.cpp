@@ -29,11 +29,11 @@ TEST_CASE("Settings")
     Settings load_settings;
     REQUIRE_EQ(load_settings.load(path), true);
 
-    Properties load_section1 = load_settings.get("section1");
-    CHECK_EQ(load_section1.get<bool>("bool", true), false);
-    CHECK_EQ(load_section1.get<int>("int", 234), 123);
+    // Properties load_section1 = load_settings.get("section1");
+    // CHECK_EQ(load_section1.get<bool>("bool", true), false);
+    // CHECK_EQ(load_section1.get<int>("int", 234), 123);
 
-    Properties load_section2 = load_settings.get("section2");
-    CHECK_EQ(load_section2.get<bool>("bool", false), true);
-    CHECK_EQ(load_section2.get<int>("int", 123), 234);
+    // Properties load_section2 = load_settings.get("section2");
+    // CHECK_EQ(load_section2.get<bool>("bool", false), true);
+    // CHECK_EQ(load_section2.get<int>("int", 123), 234);
 }

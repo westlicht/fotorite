@@ -15,7 +15,7 @@ bool Settings::load(const std::filesystem::path &path)
     if (!ifs.good())
         return false;
 
-    *m_json = json::parse(ifs);
+    auto j = json::parse(ifs);
     return true;
 }
 
